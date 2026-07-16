@@ -1,0 +1,50 @@
+# ── macOS ──
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# ── Xcode / Swift ──
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# ── Swift Package Manager ──
+.build/
+Packages/
+Package.resolved.bak
+
+# ── 环境变量与本地配置 ──
+.env
+.env.*
+!.env.example
+*.local
+
+# ── 云迁移 / SSH 密钥（切勿提交）──
+scripts/cloud-migrate/id_ed25519_ninewood
+scripts/cloud-migrate/secrets/
+scripts/cloud-migrate/artifacts/
+scripts/cloud-migrate/local.*
+scripts/cloud-migrate/*.pem
+scripts/cloud-migrate/*.key
+
+# ── 日志与临时文件 ──
+*.log
+/tmp/
+
+# ── Cursor 本地会话副本（若从桌面复制进仓库）──
+SESSION.local.md
+docs/local-session.md
+
+# ── 误生成的路径 / 本机状态文件 ──
+~/
+**/tailscaled.state
+**/tailscaled.sock

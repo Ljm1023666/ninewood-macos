@@ -1,0 +1,33 @@
+---
+description: 九木云服务器 SSH 与新会话上下文（读桌面配置）
+alwaysApply: true
+---
+
+# 九木服务器与新会话上下文
+
+进行**云服务器、部署、后端 API、AI/Ollama 链路**相关任务前，先读取：
+
+`~/Desktop/九木-新会话配置.md`
+
+## SSH（本机已配置密钥，直接执行）
+
+```bash
+export KEY="$HOME/Desktop/ninewood-macos/scripts/cloud-migrate/id_ed25519_ninewood"
+ssh -i "$KEY" root@8.217.208.203 '命令'
+```
+
+- **生产公网：** `8.217.208.203`（`tothetomorrow.com`）
+- **Tailscale：** `ninewood-prod`
+- 云端项目：`/opt/ninewood`
+- 后端：`pm2` 进程 `ninewood`，端口 `3001`
+- 本仓库是 **macOS 客户端**；服务端改动在云上 `/opt/ninewood`
+- **禁止**再对 `8.218.95.92` 做九木生产改动（已废弃）
+
+## AI 现阶段政策
+
+- 不用付费外接 API；云端 AI 走 Mac Ollama `qwen3.6:35b`
+- 运维指令见：`~/Desktop/九木AI-指令速查.md`
+
+## 安全
+
+- `scripts/cloud-migrate/id_ed25519_ninewood` 及 `secrets/`、`artifacts/` **已 gitignore，禁止提交**
