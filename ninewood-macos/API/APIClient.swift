@@ -86,6 +86,37 @@ final class APIClient {
         files: [MultipartFile] = [],
         idempotencyKey: String? = nil
     ) async throws -> T {
+        try await multipart(
+            path: path,
+            method: "POST",
+            fields: fields,
+            files: files,
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    func putMultipart<T: Decodable>(
+        _ path: String,
+        fields: [String: String],
+        files: [MultipartFile] = [],
+        idempotencyKey: String? = nil
+    ) async throws -> T {
+        try await multipart(
+            path: path,
+            method: "PUT",
+            fields: fields,
+            files: files,
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    private func multipart<T: Decodable>(
+        path: String,
+        method: String,
+        fields: [String: String],
+        files: [MultipartFile],
+        idempotencyKey: String?
+    ) async throws -> T {
         try ensureNotRateLimited()
         let boundary = "Boundary-\(UUID().uuidString)"
         var body = Data()
@@ -108,7 +139,7 @@ final class APIClient {
 
         guard let url = url(for: path) else { throw APIError.invalidURL }
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
+        request.httpMethod = method
         request.timeoutInterval = 120
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -129,7 +160,6 @@ final class APIClient {
     }
 
     private func probeHealthServices() async throws -> Bool {
-        try ensureNotRateLimited()
         struct HealthPayload: Decodable { let status: String }
         guard let url = url(for: "/health/services") else { throw APIError.invalidURL }
         var request = URLRequest(url: url)
@@ -146,12 +176,7 @@ final class APIClient {
             throw APIError.invalidResponse
         }
         if http.statusCode == 429 {
-            let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
-            rememberRateLimit(retryAfter: retryAfter)
-            throw APIError.rateLimited(
-                retryAfter: retryAfter,
-                requestID: http.value(forHTTPHeaderField: "X-Request-ID")
-            )
+            throw rateLimitedError(http: http, data: data)
         }
         guard (200 ... 299).contains(http.statusCode) else {
             throw APIError.invalidResponse
@@ -163,21 +188,15 @@ final class APIClient {
     /// `/health/services` 不可用时，探测 API 主机是否在线。
     /// 200/401 表示可达；429 必须按限流失败处理，不能伪装成健康。
     private func probeAPIReachable() async throws -> Bool {
-        try ensureNotRateLimited()
         guard let url = url(for: "/auth/me") else { throw APIError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = APIConfig.requestTimeout
         do {
-            let (_, response) = try await session.data(for: request)
+            let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
             if http.statusCode == 429 {
-                let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
-                rememberRateLimit(retryAfter: retryAfter)
-                throw APIError.rateLimited(
-                    retryAfter: retryAfter,
-                    requestID: http.value(forHTTPHeaderField: "X-Request-ID")
-                )
+                throw rateLimitedError(http: http, data: data)
             }
             // 200 已登录可达；401 表示服务在线但未授权——都算云端存活
             return (200 ... 401).contains(http.statusCode)
@@ -215,7 +234,10 @@ final class APIClient {
         body: Body?,
         idempotencyKey: String?
     ) throws -> URLRequest {
-        try ensureNotRateLimited()
+        // GET/HEAD 只读探测不应被本地写操作冷却锁死（助手列表等会误伤）
+        if method.uppercased() != "GET", method.uppercased() != "HEAD" {
+            try ensureNotRateLimited()
+        }
         guard let url = url(for: path, query: query) else { throw APIError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -240,8 +262,51 @@ final class APIClient {
     }
 
     private func rememberRateLimit(retryAfter: TimeInterval?) {
-        let seconds = max(retryAfter ?? 60, 15)
-        rateLimitedUntil = Date().addingTimeInterval(min(seconds, 900))
+        let seconds = max(retryAfter ?? 30, 5)
+        let until = Date().addingTimeInterval(min(seconds, 300))
+        if let current = rateLimitedUntil, current > until {
+            return
+        }
+        rateLimitedUntil = until
+    }
+
+    /// 供 SSE 等绕过 perform 的路径写入本地写操作冷却。
+    func noteRateLimited(retryAfter: TimeInterval?) {
+        rememberRateLimit(retryAfter: retryAfter)
+    }
+
+    /// 解析 429：优先 Retry-After，其次 body.cooldownMs / retryAfter。
+    private func retryAfterSeconds(from http: HTTPURLResponse, data: Data?) -> TimeInterval? {
+        if let header = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init), header > 0 {
+            return header
+        }
+        guard let data,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return nil
+        }
+        if let ms = object["cooldownMs"] as? Double, ms > 0 {
+            return ms / 1000
+        }
+        if let ms = object["cooldownMs"] as? Int, ms > 0 {
+            return TimeInterval(ms) / 1000
+        }
+        if let seconds = object["retryAfter"] as? Double, seconds > 0 {
+            return seconds
+        }
+        if let seconds = object["retryAfter"] as? Int, seconds > 0 {
+            return TimeInterval(seconds)
+        }
+        return nil
+    }
+
+    private func rateLimitedError(http: HTTPURLResponse, data: Data?) -> APIError {
+        let retryAfter = retryAfterSeconds(from: http, data: data)
+        rememberRateLimit(retryAfter: retryAfter)
+        return APIError.rateLimited(
+            retryAfter: retryAfter,
+            requestID: http.value(forHTTPHeaderField: "X-Request-ID") ?? latestRequestID
+        )
     }
 
     private func performRaw<T: Decodable>(_ request: URLRequest) async throws -> T {
@@ -266,7 +331,7 @@ final class APIClient {
         }
 
         if http.statusCode == 429 {
-            let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
+            let retryAfter = retryAfterSeconds(from: http, data: data)
             rememberRateLimit(retryAfter: retryAfter)
             throw APIError.rateLimited(retryAfter: retryAfter, requestID: responseRequestID)
         }
@@ -310,7 +375,7 @@ final class APIClient {
         }
 
         if http.statusCode == 429 {
-            let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
+            let retryAfter = retryAfterSeconds(from: http, data: data)
             rememberRateLimit(retryAfter: retryAfter)
             throw APIError.rateLimited(retryAfter: retryAfter, requestID: responseRequestID)
         }

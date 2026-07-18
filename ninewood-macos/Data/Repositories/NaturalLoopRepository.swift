@@ -11,9 +11,9 @@ final class NaturalLoopRepository {
     private let service: LoopService
     private let mapper: NaturalLoopMapper
 
-    init(service: LoopService, mapper: NaturalLoopMapper = NaturalLoopMapper()) {
+    init(service: LoopService, mapper: NaturalLoopMapper? = nil) {
         self.service = service
-        self.mapper = mapper
+        self.mapper = mapper ?? NaturalLoopMapper()
     }
 
     func recommend(

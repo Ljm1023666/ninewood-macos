@@ -79,6 +79,28 @@ final class AuthSession {
         connectRealtime()
     }
 
+    func register(
+        phone: String,
+        code: String,
+        password: String,
+        birthday: String,
+        guardianConsent: Bool?
+    ) async throws {
+        currentUser = try await auth.register(
+            phone: phone,
+            code: code,
+            password: password,
+            birthday: birthday,
+            guardianConsent: guardianConsent
+        )
+        self.phone = phone
+        state = .signedIn
+        backendReachable = true
+        backendStatusMessage = "已连接云端"
+        Task { await inbox.refresh(isAuthenticated: true) }
+        connectRealtime()
+    }
+
     func logout() async {
         realtime.disconnect()
         await auth.logout()

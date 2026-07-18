@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="1600" viewBox="0 0 1200 1600"
+     role="img" aria-labelledby="title desc">
+  <title id="title">九木 Logo</title>
+  <desc id="desc">以方向、结构与生命连接构成的九木标识。</desc>
+  <g fill="none"
+     stroke-width="12"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     shape-rendering="geometricPrecision">
+    <g stroke="#D62828">
+      <path d="M600 270.294373 L360 680"/>
+      <path d="M600 270.294373 L840 680"/>
+      <path d="M600 270.294373 L600 440"/>
+      <path d="M360 920 L600 1329.705627"/>
+      <path d="M840 920 L600 1329.705627"/>
+      <path d="M600 1160 L600 1329.705627"/>
+    </g>
+    <g stroke="#2FBBE0">
+      <path d="M360 680 L600 440 L840 680"/>
+      <path d="M360 680 L360 920"/>
+      <path d="M840 680 L840 920"/>
+      <path d="M360 920 L600 1160 L840 920"/>
+    </g>
+    <g stroke="#42CFA5">
+      <path d="M600 440 L600 680"/>
+      <path d="M600 680 L360 920"/>
+      <path d="M600 680 L840 920"/>
+      <path d="M360 680 L600 920"/>
+      <path d="M840 680 L600 920"/>
+      <path d="M600 920 L600 1160"/>
+    </g>
+  </g>
+</svg>

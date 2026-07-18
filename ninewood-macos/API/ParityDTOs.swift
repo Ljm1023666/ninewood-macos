@@ -11,27 +11,26 @@ struct UserListPage: Decodable {
     var rows: [SoftUserDTO] { items ?? users ?? [] }
 }
 
-struct NotificationDTO: Decodable, Identifiable, Hashable {
-    let id: String
-    let type: String?
-    let title: String?
-    let content: String?
-    let isRead: Bool?
+struct MergeChatMemberDTO: Decodable, Hashable {
+    let id: String?
+    let userId: String
+    let mergeId: String?
     let createdAt: String?
-    let refId: String?
-}
-
-struct NotificationsPage: Decodable {
-    let items: [NotificationDTO]?
-    let notifications: [NotificationDTO]?
-    var rows: [NotificationDTO] { items ?? notifications ?? [] }
 }
 
 struct MergeChatDTO: Decodable, Identifiable, Hashable {
     let id: String
     let title: String?
-    let memberCount: Int?
+    let userId: String?
+    let members: [MergeChatMemberDTO]?
+    let createdAt: String?
     let updatedAt: String?
+
+    var memberCount: Int { members?.count ?? 0 }
+    var displayTitle: String {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? "群聊" : trimmed
+    }
 }
 
 struct WelfareItemDTO: Decodable, Identifiable, Hashable {
@@ -96,6 +95,18 @@ struct BusyStatusDTO: Decodable {
 }
 
 struct SnatchStatusDTO: Decodable {
-    let credits: Int?
+    let certificationLevel: String?
     let snatchCredits: Int?
+    /// 兼容旧字段名
+    let credits: Int?
+
+    var availableCredits: Int { snatchCredits ?? credits ?? 0 }
+}
+
+struct PushPreferenceDTO: Codable {
+    var receivePushes: Bool?
+    var pushFrequency: String?
+    var excludeKeywords: [String]?
+    var excludeTags: [String]?
+    var excludeRegions: [Int]?
 }

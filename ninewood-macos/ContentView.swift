@@ -5,20 +5,26 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            switch session.state {
-            case .bootstrapping:
-                launchView
-            case .signedOut:
-                LoginView(session: session)
-            case .signedIn:
-                MainShellView()
-            case let .serviceUnavailable(message):
-                serviceUnavailableView(message: message)
+            if let preview = DesignPreviewPage.current {
+                preview.content
+            } else {
+                switch session.state {
+                case .bootstrapping:
+                    launchView
+                case .signedOut:
+                    LoginView(session: session)
+                case .signedIn:
+                    MainShellView()
+                case let .serviceUnavailable(message):
+                    serviceUnavailableView(message: message)
+                }
             }
         }
         .animation(.easeInOut(duration: 0.2), value: session.state)
         .task {
-            await session.bootstrap()
+            if DesignPreviewPage.current == nil {
+                await session.bootstrap()
+            }
         }
     }
 
@@ -52,6 +58,178 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
         .background(AppTheme.groupedBackground)
+    }
+}
+
+/// Stable, authentication-free entry points for reproducing every reference page.
+///
+/// Use `NINEWOOD_DESIGN_PREVIEW=<slug>` or `--<slug>-design-preview`.
+/// The numbered aliases mirror `docs/ui-renderings` so QA scripts do not need to
+/// know the app's internal navigation names.
+private enum DesignPreviewPage: String {
+    case login, register, discover, cardPool = "card-pool", publish, circles, loops
+    case findPeople = "find-people", messagesDirect = "messages-direct"
+    case certification, messagesGroup = "messages-group", profile
+    case orders, myDemands = "my-demands", wallet
+    case serviceCards = "service-cards", notifications, welfare, agent, settings
+    case help, myBids = "my-bids", follows, favorites
+    case disputeSheet = "dispute-sheet", paymentSheet = "payment-sheet"
+
+    static var current: Self? {
+        let environmentValue = ProcessInfo.processInfo.environment["NINEWOOD_DESIGN_PREVIEW"]
+        let argumentValue = CommandLine.arguments
+            .first(where: { $0.hasSuffix("-design-preview") })
+            .map { String($0.dropFirst(2).dropLast("-design-preview".count)) }
+        let rawValue = environmentValue ?? argumentValue
+        guard let rawValue else { return nil }
+
+        let aliases: [String: Self] = [
+            "01": .login, "01-login": .login,
+            "02": .register, "02-register": .register,
+            "03": .discover, "03-discover": .discover,
+            "04": .cardPool, "04-card-pool": .cardPool,
+            "05": .publish, "05-publish": .publish,
+            "06": .circles, "06-circles": .circles,
+            "07": .loops, "07-natural-loop": .loops,
+            "08": .findPeople, "08-find-people": .findPeople,
+            "09": .messagesDirect, "09-messages-direct": .messagesDirect,
+            "10": .certification, "10-certification": .certification,
+            "11": .messagesGroup, "11-messages-group": .messagesGroup,
+            "12": .profile, "12-profile": .profile,
+            "13": .orders, "13-orders": .orders,
+            "14": .myDemands, "14-my-demands": .myDemands,
+            "15": .wallet, "15-wallet": .wallet,
+            "16": .serviceCards, "16-service-cards": .serviceCards,
+            "17": .notifications, "17-notifications": .notifications,
+            "18": .welfare, "18-welfare": .welfare,
+            "19": .agent, "19-agent": .agent,
+            "20": .settings, "20-settings": .settings,
+            "21": .help, "21-help": .help,
+            "22": .myBids, "22-my-bids": .myBids,
+            "23": .follows, "23-follows": .follows,
+            "24": .favorites, "24-favorites": .favorites,
+            "25": .disputeSheet, "25-dispute-sheet": .disputeSheet,
+            "26": .paymentSheet, "26-payment-sheet": .paymentSheet,
+            // Backward-compatible aliases used by the original QA pass.
+            "messages": .messagesDirect
+        ]
+        return aliases[rawValue] ?? Self(rawValue: rawValue)
+    }
+
+    @ViewBuilder
+    var content: some View {
+        switch self {
+        case .login:
+            AuthReferencePreview(mode: .login)
+        case .register:
+            AuthReferencePreview(mode: .register)
+        case .discover:
+            MainShellView(designPreviewDemands: DesignPreviewFixtures.demands)
+        case .messagesDirect:
+            MainShellView(
+                designPreviewThreads: MessagesDesignPreviewFixtures.threads,
+                designPreviewBubbles: MessagesDesignPreviewFixtures.bubbles,
+                initialSelection: .messages
+            )
+        case .messagesGroup:
+            // 11 与 09 共用侧栏「消息」，仅初始二级 Tab 为群聊
+            MainShellView(
+                designPreviewThreads: MessagesDesignPreviewFixtures.threads,
+                designPreviewBubbles: MessagesDesignPreviewFixtures.bubbles,
+                designPreviewGroupMessages: true,
+                initialSelection: .messages
+            )
+        case .cardPool:
+            MainShellView(
+                designPreviewPoolDemands: CardPoolDesignPreviewFixtures.demands,
+                initialSelection: .cardPool
+            )
+        case .publish:
+            MainShellView(initialSelection: .publish)
+        case .circles:
+            MainShellView(designPreviewCircles: CirclesDesignPreviewFixtures.circles, initialSelection: .circles)
+        case .loops:
+            MainShellView(designPreviewLoopCollection: NaturalLoopDesignPreviewFixtures.collection, initialSelection: .loops)
+        case .findPeople:
+            MainShellView(designPreviewUsers: AccountDesignPreviewFixtures.users, initialSelection: .searchPeople)
+        case .certification:
+            MainShellView(designPreviewUsers: AccountDesignPreviewFixtures.users, initialSelection: .cert)
+        case .help:
+            MainShellView(initialSelection: .help)
+        case .profile:
+            MainShellView(
+                designPreviewOrders: OrdersDesignPreviewFixtures.orders,
+                initialSelection: .profile,
+                profileInitialPath: "/profile"
+            )
+        case .orders:
+            MainShellView(
+                designPreviewOrders: OrdersDesignPreviewFixtures.orders,
+                initialSelection: .profile,
+                profileInitialPath: "/orders"
+            )
+        case .myDemands:
+            MainShellView(
+                designPreviewOrders: OrdersDesignPreviewFixtures.orders,
+                initialSelection: .profile,
+                profileInitialPath: "/my-demands"
+            )
+        case .wallet:
+            MainShellView(
+                designPreviewOrders: OrdersDesignPreviewFixtures.orders,
+                initialSelection: .profile,
+                profileInitialPath: "/transactions"
+            )
+        case .serviceCards:
+            MainShellView(
+                designPreviewOrders: OrdersDesignPreviewFixtures.orders,
+                initialSelection: .profile,
+                profileInitialPath: "/service-cards"
+            )
+        case .notifications:
+            MainShellView(
+                designPreviewOrders: OrdersDesignPreviewFixtures.orders,
+                initialSelection: .profile,
+                profileInitialPath: "/notifications"
+            )
+        case .welfare:
+            MainShellView(
+                designPreviewOrders: OrdersDesignPreviewFixtures.orders,
+                initialSelection: .profile,
+                profileInitialPath: "/welfare"
+            )
+        case .agent:
+            MainShellView(
+                designPreviewOrders: OrdersDesignPreviewFixtures.orders,
+                initialSelection: .profile,
+                profileInitialPath: "/agent"
+            )
+        case .settings:
+            MainShellView(initialSelection: .profile, profileInitialPath: "/settings")
+        case .myBids:
+            MainShellView(
+                designPreviewOrders: OrdersDesignPreviewFixtures.orders,
+                initialSelection: .profile,
+                profileInitialPath: "/my-bids"
+            )
+        case .follows:
+            MainShellView(
+                designPreviewOrders: OrdersDesignPreviewFixtures.orders,
+                designPreviewUsers: AccountDesignPreviewFixtures.users,
+                initialSelection: .profile,
+                profileInitialPath: "/follows"
+            )
+        case .favorites:
+            MainShellView(
+                designPreviewOrders: OrdersDesignPreviewFixtures.orders,
+                initialSelection: .profile,
+                profileInitialPath: "/favorites"
+            )
+        case .disputeSheet:
+            TransactionSheetDesignPreview(kind: .dispute)
+        case .paymentSheet:
+            PaymentPrepayDesignPreview()
+        }
     }
 }
 

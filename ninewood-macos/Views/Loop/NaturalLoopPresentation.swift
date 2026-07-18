@@ -41,6 +41,60 @@ enum NaturalLoopPresentation {
         }
     }
 
+    /// Design-preview actor labels (HUMAN / EARTH / HEAVEN).
+    static func actorTitle(_ actor: LoopActor) -> String {
+        switch actor {
+        case .human: "HUMAN"
+        case .earth: "EARTH"
+        case .heaven: "HEAVEN"
+        }
+    }
+
+    static func actorTint(_ actor: LoopActor) -> Color {
+        switch actor {
+        case .human: AppTheme.human
+        case .earth: AppTheme.primary
+        case .heaven: AppTheme.openStatus
+        }
+    }
+
+    static func actorCaption(_ actor: LoopActor) -> String {
+        switch actor {
+        case .human: "输入需求"
+        case .earth: "执行提取"
+        case .heaven: "核验结果"
+        }
+    }
+
+    static func availabilityTitle(available: Bool) -> String {
+        available ? "可用" : "维护中"
+    }
+
+    static func availabilityTint(available: Bool) -> Color {
+        available ? AppTheme.openStatus : AppTheme.urgent
+    }
+
+    static func designRunStatusTitle(_ status: DesignRunStatus) -> String {
+        switch status {
+        case .succeeded: "成功"
+        case .running: "进行中"
+        }
+    }
+
+    static func designRunStatusTint(_ status: DesignRunStatus) -> Color {
+        switch status {
+        case .succeeded: AppTheme.openStatus
+        case .running: AppTheme.urgent
+        }
+    }
+
+    static func designRunStatusSymbol(_ status: DesignRunStatus) -> String {
+        switch status {
+        case .succeeded: "checkmark.circle.fill"
+        case .running: "clock.fill"
+        }
+    }
+
     static func executionSummary(_ execution: NaturalLoopExecution) -> String {
         if let text = loopValueText(execution.outcome), !text.isEmpty {
             return text
@@ -54,7 +108,7 @@ enum NaturalLoopPresentation {
         return "当前没有直接执行成功，可稍后重试或改由人协作完成。"
     }
 
-    static func loopValueText(_ value: LoopValue?) -> String? {
+    nonisolated static func loopValueText(_ value: LoopValue?) -> String? {
         guard let value else { return nil }
         switch value {
         case let .string(text):
@@ -99,5 +153,16 @@ enum NaturalLoopPresentation {
     enum StageStyle {
         case `default`
         case workspace
+    }
+
+    enum LoopActor {
+        case human
+        case earth
+        case heaven
+    }
+
+    enum DesignRunStatus {
+        case succeeded
+        case running
     }
 }

@@ -12,16 +12,22 @@ final class ServiceRegistry {
     let users: UserService
     let loops: LoopService
     let naturalLoops: NaturalLoopRepository
+    let demandRepository: DemandRepository
+    let orderRepository: OrderRepository
+    let messageRepository: MessageRepository
+    let userRepository: UserRepository
     let serviceCards: ServiceCardService
     let reviews: ReviewService
     let regions: RegionService
     let tags: TagService
+    let demandPublishing: DemandPublishRepository
     let certification: CertificationService
     let captcha: CaptchaService
     let circles: CircleService
     let welfare: WelfareService
     let agent: AgentService
     let chatRealtime: ChatRealtime
+    let reports: ReportService
 
     convenience init() {
         self.init(apiClient: APIClient())
@@ -37,15 +43,25 @@ final class ServiceRegistry {
         self.users = UserService(client: apiClient)
         self.loops = LoopService(client: apiClient)
         self.naturalLoops = NaturalLoopRepository(service: self.loops)
+        self.demandRepository = DemandRepository(service: self.demands)
+        self.orderRepository = OrderRepository(service: self.orders)
+        self.messageRepository = MessageRepository(service: self.messages)
+        self.userRepository = UserRepository(service: self.users)
         self.serviceCards = ServiceCardService(client: apiClient)
         self.reviews = ReviewService(client: apiClient)
         self.regions = RegionService(client: apiClient)
         self.tags = TagService(client: apiClient)
+        self.demandPublishing = DemandPublishRepository(
+            demands: self.demands,
+            tags: self.tags,
+            regions: self.regions
+        )
         self.certification = CertificationService(client: apiClient)
         self.captcha = CaptchaService(client: apiClient)
         self.circles = CircleService(client: apiClient)
         self.welfare = WelfareService(client: apiClient)
         self.agent = AgentService(client: apiClient)
         self.chatRealtime = ChatRealtime()
+        self.reports = ReportService(client: apiClient)
     }
 }

@@ -4,25 +4,48 @@ struct LoginView: View {
     @Bindable var session: AppSession
     @State private var phone = ""
     @State private var password = ""
-    @State private var showPassword = false
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showRegister = false
+    @State private var showForgotPassword = false
 
     private var canSubmit: Bool {
         phone.count >= 11 && password.count >= 1 && !isLoading
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            brandingPanel
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                // 固定左栏宽度：登录/注册只换右侧，避免整页错位
+                AuthBrandPanel(
+                    showsCornerLabel: !showRegister,
+                    logoSide: AuthDesign.authLogoSide,
+                    background: showRegister
+                        ? AuthDesign.registerPageBackground
+                        : AuthDesign.leftBackground
+                )
+                .frame(width: max(proxy.size.width * AuthDesign.authBrandRatio, AuthDesign.authBrandMinWidth))
 
-            formPanel
-                .frame(width: 400)
-                .frame(maxHeight: .infinity)
+                Divider().overlay(AuthDesign.fieldBorder)
+
+                Group {
+                    if showRegister {
+                        RegisterView(session: session) {
+                            showRegister = false
+                        }
+                    } else {
+                        loginForm
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(AppTheme.surface)
+            }
         }
-        .background(AppTheme.groupedBackground)
+        .background(
+            showRegister
+                ? AuthDesign.registerPageBackground
+                : AuthDesign.leftBackground
+        )
         .alert("登录失败", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -31,132 +54,42 @@ struct LoginView: View {
         } message: {
             Text(errorMessage ?? "")
         }
-    }
-
-    private var brandingPanel: some View {
-        VStack(alignment: .leading, spacing: AppTheme.space16) {
-            Spacer()
-            Text("N")
-                .font(.system(size: 56, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .frame(width: 72, height: 72)
-                .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            Text("九木")
-                .font(.system(size: 40, weight: .bold))
-            Text("Ninewood")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            Text("让每一个需求，都找到可靠的回应")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: 320, alignment: .leading)
-            Spacer()
-            Text("与 Windows 桌面共用同一云端后端")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+        .sheet(isPresented: $showForgotPassword) {
+            ResetPasswordSheet(session: session, initialPhone: phone)
+                .frame(minWidth: 420, minHeight: 360)
         }
-        .padding(AppTheme.space24 * 2)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(AppTheme.documentBackground)
     }
 
-    private var formPanel: some View {
-        VStack(alignment: .leading, spacing: AppTheme.space16) {
-            Spacer()
-            Text("登录")
-                .font(.largeTitle.bold())
-
-            backendStatusBanner
-
-            VStack(alignment: .leading, spacing: AppTheme.space8) {
-                Text("手机号")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("请输入手机号", text: $phone)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.telephoneNumber)
-            }
-
-            VStack(alignment: .leading, spacing: AppTheme.space8) {
-                Text("密码")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                HStack {
-                    Group {
-                        if showPassword {
-                            TextField("请输入密码", text: $password)
-                        } else {
-                            SecureField("请输入密码", text: $password)
-                        }
-                    }
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.password)
-
-                    Button {
-                        showPassword.toggle()
-                    } label: {
-                        Image(systemName: showPassword ? "eye.slash" : "eye")
-                    }
-                    .buttonStyle(.borderless)
-                    .help(showPassword ? "隐藏密码" : "显示密码")
-                }
-            }
-
-            Button {
+    private var loginForm: some View {
+        AuthLoginFormLayout(
+            phone: $phone,
+            password: $password,
+            connectionReachable: session.backendReachable,
+            connectionMessage: session.backendReachable
+                ? "已连接到 Ninewood 云服务"
+                : (session.backendStatusMessage.isEmpty ? "服务暂不可用" : session.backendStatusMessage),
+            onRetryConnection: { Task { await session.checkBackend() } },
+            canSubmit: canSubmit,
+            isLoading: isLoading
+        ) {
+            AuthPrimaryButton(
+                title: "登录",
+                enabled: canSubmit,
+                isLoading: isLoading,
+                height: 50
+            ) {
                 Task { await submit() }
-            } label: {
-                Group {
-                    if isLoading {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Text("登录")
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 36)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(!canSubmit)
-
-            Text("与 Ninewood Web / Windows 共用账号 · 平台担保交易")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Text("登录即表示你已阅读并同意《用户协议》和《隐私政策》")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+        } registerAction: {
+            Button("注册") { showRegister = true }
+                .buttonStyle(.plain)
+                .foregroundStyle(AuthDesign.brand)
+        } forgotAction: {
+            Button("忘记密码？") { showForgotPassword = true }
+                .buttonStyle(.plain)
+                .font(.system(size: 13))
+                .foregroundStyle(AuthDesign.brand)
         }
-        .padding(40)
-    }
-
-    private var backendStatusBanner: some View {
-        VStack(alignment: .leading, spacing: AppTheme.space8) {
-            HStack(spacing: AppTheme.space8) {
-                Circle()
-                    .fill(session.backendReachable ? AppTheme.openStatus : AppTheme.error)
-                    .frame(width: 8, height: 8)
-                Text(session.backendStatusMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if !session.backendReachable {
-                    Button("重试") {
-                        Task { await session.checkBackend() }
-                    }
-                    .font(.caption)
-                }
-            }
-            if !session.backendReachable {
-                Text("云端地址：\(APIConfig.baseURL.absoluteString)。若使用 Clash/VPN，可尝试关闭增强模式后重试。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(10)
-        .background(AppTheme.fill.opacity(0.55), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private func submit() async {
@@ -166,6 +99,119 @@ struct LoginView: View {
             try await session.login(phone: phone, password: password)
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+}
+
+private struct ResetPasswordSheet: View {
+    @Bindable var session: AppSession
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var phone: String
+    @State private var code = ""
+    @State private var newPassword = ""
+    @State private var isSendingCode = false
+    @State private var isSubmitting = false
+    @State private var feedback: String?
+    @State private var didSucceed = false
+    @State private var sentHint: String?
+
+    init(session: AppSession, initialPhone: String) {
+        self.session = session
+        _phone = State(initialValue: initialPhone)
+    }
+
+    private var canSendCode: Bool {
+        phone.count >= 11 && !isSendingCode && !isSubmitting
+    }
+
+    private var canSubmit: Bool {
+        phone.count >= 11 && code.count >= 4 && newPassword.count >= 6 && !isSubmitting
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("重置密码")
+                .font(.title2.bold())
+            Text("通过手机验证码设置新密码。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            TextField("手机号", text: $phone)
+                .textFieldStyle(.roundedBorder)
+            HStack(spacing: 8) {
+                TextField("验证码", text: $code)
+                    .textFieldStyle(.roundedBorder)
+                Button(isSendingCode ? "发送中…" : "发送验证码") {
+                    Task { await sendCode() }
+                }
+                .disabled(!canSendCode)
+            }
+            if let sentHint {
+                Text(sentHint)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.openStatus)
+            }
+            SecureField("新密码（至少 6 位）", text: $newPassword)
+                .textFieldStyle(.roundedBorder)
+
+            if let feedback {
+                Text(feedback)
+                    .font(.caption)
+                    .foregroundStyle(didSucceed ? AppTheme.openStatus : AppTheme.error)
+            }
+
+            HStack {
+                Spacer()
+                Button("取消") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button(isSubmitting ? "提交中…" : "重置密码") {
+                    Task { await submit() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canSubmit)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+    }
+
+    private func sendCode() async {
+        isSendingCode = true
+        feedback = nil
+        sentHint = nil
+        defer { isSendingCode = false }
+        do {
+            let token = try await session.captchaService.obtainSendCodeToken()
+            let result = try await session.authService.sendResetCode(phone: phone, captchaToken: token)
+            if let code = result.code, !code.isEmpty {
+                sentHint = "验证码已发送（开发通道：\(code)）"
+                self.code = code
+            } else {
+                sentHint = "验证码已发送，请查收短信"
+            }
+        } catch {
+            feedback = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func submit() async {
+        isSubmitting = true
+        feedback = nil
+        didSucceed = false
+        defer { isSubmitting = false }
+        do {
+            try await session.authService.resetPassword(
+                phone: phone,
+                code: code,
+                newPassword: newPassword
+            )
+            didSucceed = true
+            feedback = "密码已重置，请使用新密码登录"
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            dismiss()
+        } catch {
+            feedback = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 }

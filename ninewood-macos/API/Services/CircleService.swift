@@ -31,7 +31,9 @@ final class CircleService {
                 inviteCode: circle.inviteCode,
                 type: circle.type,
                 ownerId: circle.ownerId,
-                owner: circle.owner
+                owner: circle.owner,
+                memberCapacity: circle.memberCapacity,
+                lastActivity: circle.lastActivity
             )
         }
     }
@@ -116,5 +118,32 @@ final class CircleService {
     func heartbeat(circleId: String) async throws {
         struct OK: Decodable {}
         let _: OK = try await client.post("/circles/\(circleId)/hub/heartbeat")
+    }
+
+    func resetInviteCode(circleId: String) async throws -> String {
+        let dto: CircleInviteCodeDTO = try await client.post("/circles/\(circleId)/invite-code/reset")
+        guard let code = dto.inviteCode, !code.isEmpty else {
+            throw APIError.server(statusCode: 500, errorCode: nil, message: "未返回新邀请码", requestID: nil)
+        }
+        return code
+    }
+
+    func leave(circleId: String) async throws {
+        struct OK: Decodable {}
+        let _: OK = try await client.post("/circles/\(circleId)/leave")
+    }
+
+    func updateMemberRole(circleId: String, userId: String, role: String) async throws {
+        struct Body: Encodable { let role: String }
+        struct OK: Decodable {}
+        let _: OK = try await client.patch(
+            "/circles/\(circleId)/members/\(userId)",
+            body: Body(role: role)
+        )
+    }
+
+    func removeMember(circleId: String, userId: String) async throws {
+        struct OK: Decodable {}
+        let _: OK = try await client.delete("/circles/\(circleId)/members/\(userId)")
     }
 }

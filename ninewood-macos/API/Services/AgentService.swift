@@ -11,6 +11,24 @@ struct AgentConversationDTO: Decodable, Identifiable, Hashable {
     let lastMessagePreview: String?
     let messageCount: Int?
 
+    init(
+        id: String,
+        title: String?,
+        thinkMode: Bool?,
+        createdAt: String?,
+        updatedAt: String?,
+        lastMessagePreview: String?,
+        messageCount: Int?
+    ) {
+        self.id = id
+        self.title = title
+        self.thinkMode = thinkMode
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.lastMessagePreview = lastMessagePreview
+        self.messageCount = messageCount
+    }
+
     enum CodingKeys: String, CodingKey {
         case id, title, thinkMode, createdAt, updatedAt, lastMessagePreview, messageCount
         case count = "_count"
@@ -112,6 +130,13 @@ struct AgentSendMessageResponseDTO: Decodable {
     }
 }
 
+struct AgentApproveToolResponseDTO: Decodable {
+    let success: Bool?
+    let approved: Bool?
+    let message: String?
+    let error: String?
+}
+
 // MARK: - Service
 
 @MainActor
@@ -150,6 +175,22 @@ final class AgentService {
     func sendMessageNonStream(id: String, message: String) async throws -> AgentSendMessageResponseDTO {
         struct Body: Encodable { let message: String }
         return try await client.postRaw("/agent/conversations/\(id)/messages", body: Body(message: message))
+    }
+
+    @discardableResult
+    func approveTool(
+        conversationId: String,
+        toolCallId: String,
+        approved: Bool
+    ) async throws -> AgentApproveToolResponseDTO {
+        struct Body: Encodable {
+            let toolCallId: String
+            let approved: Bool
+        }
+        return try await client.postRaw(
+            "/agent/conversations/\(conversationId)/approve-tool",
+            body: Body(toolCallId: toolCallId, approved: approved)
+        )
     }
 
     /// Streams assistant reply via SSE. Returns a cancellable task.
@@ -205,6 +246,21 @@ final class AgentService {
                 if http.statusCode == 401 {
                     throw APIError.unauthorized
                 }
+                if http.statusCode == 429 {
+                    var preview = Data()
+                    for try await byte in bytes {
+                        preview.append(byte)
+                        if preview.count >= 2048 { break }
+                    }
+                    let retryAfter = Self.retryAfterSeconds(http: http, data: preview)
+                    await MainActor.run {
+                        client.noteRateLimited(retryAfter: retryAfter)
+                    }
+                    throw APIError.rateLimited(
+                        retryAfter: retryAfter,
+                        requestID: http.value(forHTTPHeaderField: "X-Request-ID")
+                    )
+                }
                 guard (200 ... 299).contains(http.statusCode) else {
                     throw APIError.server(
                         statusCode: http.statusCode,
@@ -250,5 +306,19 @@ final class AgentService {
                 }
             }
         }
+    }
+
+    private static func retryAfterSeconds(http: HTTPURLResponse, data: Data) -> TimeInterval? {
+        if let header = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init), header > 0 {
+            return header
+        }
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        if let ms = object["cooldownMs"] as? Double, ms > 0 { return ms / 1000 }
+        if let ms = object["cooldownMs"] as? Int, ms > 0 { return TimeInterval(ms) / 1000 }
+        if let seconds = object["retryAfter"] as? Double, seconds > 0 { return seconds }
+        if let seconds = object["retryAfter"] as? Int, seconds > 0 { return TimeInterval(seconds) }
+        return nil
     }
 }

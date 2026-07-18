@@ -8,15 +8,31 @@ final class DemandService {
         self.client = client
     }
 
-    func searchDemands(page: Int = 1, limit: Int = 20) async throws -> [Demand] {
-        let pageData: DemandsSearchResult = try await client.get(
-            "/demands/search",
-            query: [
-                URLQueryItem(name: "page", value: String(page)),
-                URLQueryItem(name: "limit", value: String(limit)),
-                URLQueryItem(name: "stage", value: "active"),
-            ]
-        )
+    func searchDemands(
+        page: Int = 1,
+        limit: Int = 20,
+        keyword: String? = nil,
+        lat: Double? = nil,
+        lng: Double? = nil,
+        distanceKm: Double? = nil
+    ) async throws -> [Demand] {
+        var query = [
+            URLQueryItem(name: "page", value: String(page)),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "stage", value: "active"),
+        ]
+        if let keyword {
+            let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                query.append(URLQueryItem(name: "keyword", value: trimmed))
+            }
+        }
+        if let lat, let lng {
+            query.append(URLQueryItem(name: "lat", value: String(lat)))
+            query.append(URLQueryItem(name: "lng", value: String(lng)))
+            query.append(URLQueryItem(name: "distance", value: String(distanceKm ?? 20)))
+        }
+        let pageData: DemandsSearchResult = try await client.get("/demands/search", query: query)
         return pageData.demands.map(DemandMapper.mapListItem)
     }
 
@@ -185,16 +201,35 @@ final class DemandService {
     }
 
     func myApplications(page: Int = 1) async throws -> [Demand] {
+        struct ApplicationRow: Decodable {
+            let id: String
+            let status: String?
+            let demand: DemandListItemDTO?
+            // 兼容偶发平铺结构
+            let demandId: String?
+            let title: String?
+        }
         struct Page: Decodable {
             let demands: [DemandListItemDTO]?
             let items: [DemandListItemDTO]?
-            let applications: [DemandListItemDTO]?
+            let applications: [ApplicationRow]?
         }
         let pageData: Page = try await client.get(
             "/demands/my-applications",
             query: [URLQueryItem(name: "page", value: String(page))]
         )
-        let rows = pageData.demands ?? pageData.items ?? pageData.applications ?? []
+        if let apps = pageData.applications, !apps.isEmpty {
+            return apps.compactMap { row in
+                guard let demandDTO = row.demand else { return nil }
+                var demand = DemandMapper.mapListItem(demandDTO)
+                demand.applicationId = row.id
+                if let status = row.status {
+                    demand.status = DemandStatus(rawValue: status)
+                }
+                return demand
+            }
+        }
+        let rows = pageData.demands ?? pageData.items ?? []
         return rows.map(DemandMapper.mapListItem)
     }
 
@@ -206,6 +241,94 @@ final class DemandService {
     func deleteDemand(id: String) async throws {
         struct OK: Decodable {}
         let _: OK = try await client.delete("/demands/\(id)")
+    }
+
+    func saveDraft(
+        id: String? = nil,
+        title: String,
+        description: String,
+        expectedOutcome: String,
+        minPrice: Decimal,
+        expectedPrice: Decimal? = nil,
+        category: String = "日常服务",
+        serviceType: String = "OFFLINE",
+        maxApplicants: Int = 10,
+        isCertifiedOnly: Bool = false,
+        tags: [String] = [],
+        regionId: Int? = nil,
+        timeLimitMinutes: Int? = nil
+    ) async throws -> DemandDetailDTO {
+        struct Body: Encodable {
+            let id: String?
+            let title: String
+            let description: String
+            let expectedOutcome: String
+            let minPrice: Double
+            let amountEstimate: Double?
+            let category: String
+            let serviceType: String
+            let maxApplicants: Int
+            let isCertifiedOnly: Bool
+            let tags: [String]
+            let regionId: Int?
+            let timeLimitMinutes: Int?
+        }
+        return try await client.post(
+            "/demands/drafts",
+            body: Body(
+                id: id,
+                title: title,
+                description: description,
+                expectedOutcome: expectedOutcome,
+                minPrice: NSDecimalNumber(decimal: minPrice).doubleValue,
+                amountEstimate: expectedPrice.map { NSDecimalNumber(decimal: $0).doubleValue },
+                category: category,
+                serviceType: serviceType,
+                maxApplicants: maxApplicants,
+                isCertifiedOnly: isCertifiedOnly,
+                tags: tags,
+                regionId: regionId,
+                timeLimitMinutes: timeLimitMinutes
+            )
+        )
+    }
+
+    func listDrafts(page: Int = 1) async throws -> [Demand] {
+        struct FlexiblePage: Decodable {
+            let demands: [DemandListItemDTO]?
+            let items: [DemandListItemDTO]?
+            let drafts: [DemandListItemDTO]?
+        }
+        let pageData: FlexiblePage = try await client.get(
+            "/demands/drafts",
+            query: [URLQueryItem(name: "page", value: String(page))]
+        )
+        let rows = pageData.demands ?? pageData.items ?? pageData.drafts ?? []
+        return rows.map(DemandMapper.mapListItem)
+    }
+
+    func publishDraft(id: String) async throws -> DemandDetailDTO {
+        try await client.post("/demands/drafts/\(id)/publish")
+    }
+
+    func withdrawBid(applicationId: String) async throws {
+        struct OK: Decodable {}
+        let _: OK = try await client.post("/demands/applications/\(applicationId)/withdraw")
+    }
+
+    func extendCommunication(
+        demandID: String,
+        applicantID: String,
+        minutes: Int
+    ) async throws -> DemandApplicantDTO {
+        struct Body: Encodable {
+            let applicantId: String
+            let minutes: Int
+        }
+        return try await client.post(
+            "/demands/\(demandID)/extend-comm",
+            body: Body(applicantId: applicantID, minutes: minutes)
+        )
     }
 }
 
@@ -227,7 +350,10 @@ enum DemandMapper {
             title: dto.title,
             expectedOutcome: body,
             minPrice: minPrice,
-            expectedPrice: expected,
+            expectedPrice: expected ?? dto.amountEstimate?.value,
+            deposit: dto.deposit?.value,
+            mediaUrls: dto.mediaUrls?.values ?? [],
+            lifecycleStage: dto.lifecycleStage,
             distanceText: distanceText(for: distanceKm, serviceType: dto.serviceType),
             countdownText: countdownText(from: deadline),
             applicantCount: applicantCount,
@@ -252,7 +378,10 @@ enum DemandMapper {
             title: dto.title,
             expectedOutcome: dto.expectedOutcome ?? dto.description ?? "暂无预期结果说明",
             minPrice: dto.minPrice?.value ?? 0,
-            expectedPrice: nil,
+            expectedPrice: dto.amountEstimate?.value,
+            deposit: dto.deposit?.value,
+            mediaUrls: dto.mediaUrls?.values ?? [],
+            lifecycleStage: dto.lifecycleStage,
             distanceText: dto.serviceType == "ONLINE" ? "线上服务" : "附近",
             countdownText: countdownText(from: dto.expireAt),
             applicantCount: applicantCount,

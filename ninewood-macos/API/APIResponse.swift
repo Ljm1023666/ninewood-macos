@@ -31,6 +31,10 @@ struct PaginatedItems<T: Decodable>: Decodable {
 struct FlexibleDecimal: Decodable, Hashable {
     let value: Decimal
 
+    init(_ value: Decimal) {
+        self.value = value
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let d = try? container.decode(Decimal.self) {
@@ -46,201 +50,58 @@ struct FlexibleDecimal: Decodable, Hashable {
     }
 }
 
-struct SoftUserDTO: Decodable, Hashable, Identifiable {
-    let id: String
-    let phone: String?
-    let nickname: String?
-    let avatarUrl: String?
-    let coverUrl: String?
-    let demandCardCoverUrl: String?
-    let creditScore: Int?
-    let certificationLevel: String?
-    let completedOrders: Int?
-    let bio: String?
-    let cityCode: String?
-    let ipRegion: String?
-    let isFollowing: Bool?
+/// 兼容 ISO 时间字符串与历史 int（分钟/时间戳）；解码失败时记为 nil，不拖垮整单。
+struct FlexibleDateValue: Decodable, Hashable {
+    let isoString: String?
 
-    var avatarMediaURL: URL? { APIConfig.mediaURL(avatarUrl) }
-    var coverMediaURL: URL? { APIConfig.mediaURL(coverUrl) }
-    var cardCoverMediaURL: URL? { APIConfig.mediaURL(demandCardCoverUrl) }
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            isoString = nil
+            return
+        }
+        if let s = try? container.decode(String.self) {
+            isoString = s
+            return
+        }
+        // 历史契约偶发传 Int 分钟或时间戳：忽略数值，避免整单解码失败
+        if (try? container.decode(Int.self)) != nil || (try? container.decode(Double.self)) != nil {
+            isoString = nil
+            return
+        }
+        isoString = nil
+    }
 }
 
-// MARK: - Auth
+/// 兼容 `mediaUrls` 为字符串数组或 JSON 字符串。
+struct FlexibleStringList: Decodable, Hashable {
+    let values: [String]
 
-struct AuthPayloadDTO: Decodable {
-    let token: String
-    let user: UserDTO
-}
-
-struct UserDTO: Decodable, Hashable {
-    let id: String
-    let phone: String?
-    let nickname: String?
-    let avatarUrl: String?
-    let coverUrl: String?
-    let demandCardCoverUrl: String?
-    let creditScore: Int?
-    let certificationLevel: String?
-    let completedOrders: Int?
-
-    var avatarMediaURL: URL? { APIConfig.mediaURL(avatarUrl) }
-    var coverMediaURL: URL? { APIConfig.mediaURL(coverUrl) }
-}
-
-// MARK: - Demand
-
-struct DemandListItemDTO: Decodable {
-    let id: String
-    let title: String
-    let description: String?
-    let descriptionPreview: String?
-    let expectedOutcome: String?
-    let minPrice: FlexibleDecimal?
-    let expectedPrice: FlexibleDecimal?
-    let applicantCount: Int?
-    let maxApplicants: Int?
-    let tagName: String?
-    let category: String?
-    let serviceType: String?
-    let deadlineAt: String?
-    let expireAt: String?
-    let createdAt: String?
-    let distance: Double?
-    let distanceKm: Double?
-    let status: String?
-    let isCertifiedOnly: Bool?
-    let tags: [String]?
-    let user: SoftUserDTO?
-    let coverImage: String?
-    let coverUrl: String?
-}
-
-struct DemandsSearchResult: Decodable {
-    let demands: [DemandListItemDTO]
-    let total: Int
-    let page: Int
-    let limit: Int
-    let totalPages: Int
-}
-
-struct DemandDetailDTO: Decodable {
-    let id: String
-    let title: String
-    let description: String?
-    let expectedOutcome: String?
-    let minPrice: FlexibleDecimal?
-    let category: String?
-    let tagName: String?
-    let tags: [String]?
-    let serviceType: String?
-    let expireAt: String?
-    let visibleUntil: String?
-    let timeLimit: String?
-    let applicantCount: Int?
-    let maxApplicants: Int?
-    let isCertifiedOnly: Bool?
-    let status: String?
-    let visibilityWindow: Int?
-    let user: SoftUserDTO?
-    let isOwner: Bool?
-    let hasOrder: Bool?
-    let acceptedProviderId: String?
-    let applicantsV2: [DemandApplicantDTO]?
-    let coverImage: String?
-    let coverUrl: String?
-}
-
-struct DemandApplicantDTO: Decodable {
-    let id: String
-    let demandId: String?
-    let userId: String
-    let message: String?
-    let status: String
-    let createdAt: String?
-    let commStartAt: String?
-    let commDeadline: String?
-    let user: SoftUserDTO?
-}
-
-struct DemandAcceptResultDTO: Decodable {
-    let ok: Bool?
-    let acceptedUserId: String?
-    let orderId: String?
-}
-
-struct OperationResultDTO: Decodable {
-    let ok: Bool?
-    let message: String?
-}
-
-struct DemandRequestBody: Encodable {
-    let message: String
-}
-
-struct DemandApplyBody: Encodable {
-    let offerPrice: Double?
-    let message: String?
-}
-
-// MARK: - Order
-
-struct OrderListResult: Decodable {
-    let orders: [OrderDTO]
-    let total: Int
-    let page: Int
-    let totalPages: Int
-}
-
-struct OrderDTO: Decodable {
-    let id: String
-    let demandId: String?
-    let status: String
-    let agreedPrice: FlexibleDecimal?
-    let paidAt: String?
-    let completedAt: String?
-    let createdAt: String?
-    let provider: SoftUserDTO?
-    let requester: SoftUserDTO?
-    let demand: OrderDemandDTO?
-}
-
-struct OrderDemandDTO: Decodable {
-    let id: String
-    let title: String?
-    let description: String?
-    let minPrice: FlexibleDecimal?
-    let category: String?
-    let timeLimit: Int?
-}
-
-// MARK: - Message
-
-struct ConversationDTO: Decodable {
-    let user: SoftUserDTO
-    let lastMessage: MessageDTO?
-    let unreadCount: Int?
-}
-
-struct MessageDTO: Decodable {
-    let id: String
-    let fromUserId: String
-    let toUserId: String
-    let content: String
-    let type: String?
-    let isRead: Bool?
-    let createdAt: String?
-    let fromUser: SoftUserDTO?
-    let toUser: SoftUserDTO?
-}
-
-struct SendMessageBody: Encodable {
-    let toUserId: String
-    let content: String
-}
-
-struct UnreadCountDTO: Decodable {
-    let count: Int
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            values = []
+            return
+        }
+        if let arr = try? container.decode([String].self) {
+            values = arr
+            return
+        }
+        if let s = try? container.decode(String.self) {
+            if s.isEmpty {
+                values = []
+                return
+            }
+            if let data = s.data(using: .utf8),
+               let arr = try? JSONDecoder().decode([String].self, from: data) {
+                values = arr
+                return
+            }
+            values = [s]
+            return
+        }
+        values = []
+    }
 }
 
 // MARK: - Wallet
@@ -504,10 +365,62 @@ struct ServiceCardDTO: Decodable, Identifiable, Hashable {
     let priceMin: FlexibleDecimal?
     let priceMax: FlexibleDecimal?
     let publisher: SoftUserDTO?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, summary, description, category, serviceType, status, tags
+        case priceMin, priceMax, publisher, user
+    }
+
+    init(
+        id: String,
+        title: String,
+        summary: String? = nil,
+        description: String? = nil,
+        category: String? = nil,
+        serviceType: String? = nil,
+        status: String? = nil,
+        tags: [String]? = nil,
+        priceMin: FlexibleDecimal? = nil,
+        priceMax: FlexibleDecimal? = nil,
+        publisher: SoftUserDTO? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.summary = summary
+        self.description = description
+        self.category = category
+        self.serviceType = serviceType
+        self.status = status
+        self.tags = tags
+        self.priceMin = priceMin
+        self.priceMax = priceMax
+        self.publisher = publisher
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        summary = try c.decodeIfPresent(String.self, forKey: .summary)
+        description = try c.decodeIfPresent(String.self, forKey: .description)
+        category = try c.decodeIfPresent(String.self, forKey: .category)
+        serviceType = try c.decodeIfPresent(String.self, forKey: .serviceType)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        tags = try c.decodeIfPresent([String].self, forKey: .tags)
+        priceMin = try c.decodeIfPresent(FlexibleDecimal.self, forKey: .priceMin)
+        priceMax = try c.decodeIfPresent(FlexibleDecimal.self, forKey: .priceMax)
+        if let publisher = try c.decodeIfPresent(SoftUserDTO.self, forKey: .publisher) {
+            self.publisher = publisher
+        } else {
+            self.publisher = try c.decodeIfPresent(SoftUserDTO.self, forKey: .user)
+        }
+    }
 }
 
 struct CaptchaSiteKeyDTO: Decodable {
     let siteKey: String?
+    /// `hcaptcha` | `bypass`（未配置人机验证时）
+    let mode: String?
 }
 
 struct RegionDTO: Decodable, Identifiable {
@@ -532,6 +445,12 @@ struct CertStatusDTO: Decodable {
     }
 }
 
+struct CircleLastActivityDTO: Decodable, Hashable {
+    let at: String?
+    let label: String?
+    let type: String?
+}
+
 struct CircleDTO: Decodable, Identifiable, Hashable {
     let id: String
     let name: String
@@ -545,12 +464,14 @@ struct CircleDTO: Decodable, Identifiable, Hashable {
     let type: String?
     let ownerId: String?
     let owner: SoftUserDTO?
+    let memberCapacity: Int?
+    let lastActivity: CircleLastActivityDTO?
 
     var coverMediaURL: URL? { APIConfig.mediaURL(coverUrl) }
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, memberCount, cityCode, isMember, role
-        case coverUrl, inviteCode, type, ownerId, owner
+        case coverUrl, inviteCode, type, ownerId, owner, memberCapacity, lastActivity
         case count = "_count"
     }
 
@@ -569,6 +490,8 @@ struct CircleDTO: Decodable, Identifiable, Hashable {
         type = try c.decodeIfPresent(String.self, forKey: .type)
         ownerId = try c.decodeIfPresent(String.self, forKey: .ownerId)
         owner = try c.decodeIfPresent(SoftUserDTO.self, forKey: .owner)
+        memberCapacity = try c.decodeIfPresent(Int.self, forKey: .memberCapacity)
+        lastActivity = try c.decodeIfPresent(CircleLastActivityDTO.self, forKey: .lastActivity)
         if let mc = try c.decodeIfPresent(Int.self, forKey: .memberCount) {
             memberCount = mc
         } else if let nested = try? c.nestedContainer(keyedBy: CountKeys.self, forKey: .count) {
@@ -590,7 +513,9 @@ struct CircleDTO: Decodable, Identifiable, Hashable {
         inviteCode: String?,
         type: String?,
         ownerId: String?,
-        owner: SoftUserDTO? = nil
+        owner: SoftUserDTO? = nil,
+        memberCapacity: Int? = nil,
+        lastActivity: CircleLastActivityDTO? = nil
     ) {
         self.id = id
         self.name = name
@@ -604,6 +529,8 @@ struct CircleDTO: Decodable, Identifiable, Hashable {
         self.type = type
         self.ownerId = ownerId
         self.owner = owner
+        self.memberCapacity = memberCapacity
+        self.lastActivity = lastActivity
     }
 }
 
@@ -670,6 +597,52 @@ struct CircleActivitiesPage: Decodable {
 struct CircleHubHomeDTO: Decodable {
     let stats: CircleHubStatsDTO?
     let announcement: CircleAnnouncementDTO?
+    let purpose: String?
+    let memberCapacity: Int?
+    let activeMembers: CircleActiveMembersDTO?
+    let heartbeat: CircleHeartbeatDTO?
+    let recentResources: [CircleResourceDTO]?
+    let activities: [CircleActivityDTO]?
+
+    init(
+        stats: CircleHubStatsDTO? = nil,
+        announcement: CircleAnnouncementDTO? = nil,
+        purpose: String? = nil,
+        memberCapacity: Int? = nil,
+        activeMembers: CircleActiveMembersDTO? = nil,
+        heartbeat: CircleHeartbeatDTO? = nil,
+        recentResources: [CircleResourceDTO]? = nil,
+        activities: [CircleActivityDTO]? = nil
+    ) {
+        self.stats = stats
+        self.announcement = announcement
+        self.purpose = purpose
+        self.memberCapacity = memberCapacity
+        self.activeMembers = activeMembers
+        self.heartbeat = heartbeat
+        self.recentResources = recentResources
+        self.activities = activities
+    }
+}
+
+struct CircleActiveMembersDTO: Decodable {
+    let items: [CircleActiveMemberItemDTO]?
+    let extraCount: Int?
+    let total: Int?
+}
+
+struct CircleActiveMemberItemDTO: Decodable, Identifiable, Hashable {
+    var id: String { userId }
+    let userId: String
+    let nickname: String?
+    let avatarUrl: String?
+
+    var avatarMediaURL: URL? { APIConfig.mediaURL(avatarUrl) }
+}
+
+struct CircleHeartbeatDTO: Decodable {
+    let label: String?
+    let speakers7d: Int?
 }
 
 struct CircleHubStatsDTO: Decodable {
@@ -685,13 +658,9 @@ struct CircleAnnouncementDTO: Decodable {
     let title: String?
     let body: String?
     let pinned: Bool?
+    let createdAt: String?
 }
 
-struct DemandBidDTO: Decodable {
-    let id: String?
-    let offerPrice: FlexibleDecimal?
-    let message: String?
-    let status: String?
-    let createdAt: String?
-    let user: SoftUserDTO?
+struct CircleInviteCodeDTO: Decodable {
+    let inviteCode: String?
 }

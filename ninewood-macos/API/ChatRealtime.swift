@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import SocketIO
+@preconcurrency import SocketIO
 
 struct RealtimeIncomingMessage: Equatable, Identifiable {
     let id: String
@@ -8,6 +8,8 @@ struct RealtimeIncomingMessage: Equatable, Identifiable {
     let toUserId: String
     let content: String
     let createdAt: Date
+    let hasCardAttachment: Bool
+    let mergeId: String?
 }
 
 /// Socket.IO 实时通道（对齐 Windows `utils/socket.ts`）
@@ -61,7 +63,13 @@ final class ChatRealtime {
         socket.on("private:message") { [weak self] data, _ in
             guard let self else { return }
             Task { @MainActor in
-                self.handlePrivateMessage(data)
+                self.handleIncoming(data, event: .privateMessage)
+            }
+        }
+        socket.on("merge:message") { [weak self] data, _ in
+            guard let self else { return }
+            Task { @MainActor in
+                self.handleIncoming(data, event: .mergeMessage)
             }
         }
         socket.on("notification:new") { [weak self] _, _ in
@@ -88,48 +96,30 @@ final class ChatRealtime {
 
     private func startPing() {
         pingTimer?.invalidate()
-        pingTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.socket?.emit("ping")
-            }
+        // 捕获当前 socket，避免计时器的并发闭包跨隔离域捕获 MainActor self。
+        let activeSocket = socket
+        pingTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { _ in
+            activeSocket?.emit("ping")
         }
     }
 
-    private func handlePrivateMessage(_ data: [Any]) {
-        guard let raw = data.first else { return }
-        let dict: [String: Any]
-        if let d = raw as? [String: Any] {
-            dict = d
-        } else if let d = raw as? NSDictionary {
-            dict = d as? [String: Any] ?? [:]
-        } else {
-            return
-        }
+    private enum IncomingEvent {
+        case privateMessage
+        case mergeMessage
+    }
 
-        let from = (dict["fromUserId"] as? String)
-            ?? (dict["senderId"] as? String)
-            ?? ((dict["fromUser"] as? [String: Any])?["id"] as? String)
-            ?? ""
-        let to = (dict["toUserId"] as? String)
-            ?? (dict["receiverId"] as? String)
-            ?? ""
-        let content = (dict["content"] as? String) ?? ""
-        guard !from.isEmpty, !content.isEmpty else { return }
-
-        let id = (dict["id"] as? String) ?? UUID().uuidString
-        let createdAt: Date
-        if let iso = dict["createdAt"] as? String, let d = APIDate.parse(iso) {
-            createdAt = d
-        } else {
-            createdAt = Date()
-        }
+    private func handleIncoming(_ data: [Any], event: IncomingEvent) {
+        guard let raw = data.first, let parsed = ChatRealtimePayload.parse(raw) else { return }
+        _ = event
 
         lastIncoming = RealtimeIncomingMessage(
-            id: id,
-            fromUserId: from,
-            toUserId: to,
-            content: content,
-            createdAt: createdAt
+            id: parsed.id,
+            fromUserId: parsed.fromUserId,
+            toUserId: parsed.toUserId,
+            content: parsed.content,
+            createdAt: parsed.createdAt,
+            hasCardAttachment: parsed.hasCardAttachment,
+            mergeId: parsed.mergeId
         )
         inboxEpoch += 1
         onUnreadHint?()

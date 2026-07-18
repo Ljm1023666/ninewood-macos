@@ -34,16 +34,40 @@ final class OrderService {
         try await client.post("/orders/\(id)/confirm")
     }
 
-    func dispute(id: String, reason: String) async throws {
+    func payBreakdown(id: String) async throws -> OrderPayBreakdownDTO {
+        try await client.get("/orders/\(id)/pay-breakdown")
+    }
+
+    func uploadEvidence(fileData: Data, fileName: String, mimeType: String = "image/jpeg") async throws -> EvidenceUploadResultDTO {
+        try await client.postMultipart(
+            "/orders/uploads/evidence",
+            fields: [:],
+            files: [
+                MultipartFile(
+                    fieldName: "file",
+                    fileName: fileName,
+                    mimeType: mimeType,
+                    data: fileData
+                )
+            ]
+        )
+    }
+
+    func dispute(id: String, reason: String, evidenceUrls: [String] = []) async throws {
         struct Body: Encodable {
             let reason: String
             let description: String
+            let evidenceUrls: [String]
         }
         struct OK: Decodable { let message: String? }
         let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
         let _: OK = try await client.post(
             "/orders/\(id)/dispute",
-            body: Body(reason: trimmed, description: trimmed)
+            body: Body(
+                reason: trimmed,
+                description: trimmed,
+                evidenceUrls: evidenceUrls
+            )
         )
     }
 
@@ -67,47 +91,30 @@ final class OrderService {
     }
 }
 
-struct OrderPrepayResultDTO: Decodable {
-    let message: String?
-    let amount: FlexibleDecimal?
-    let serviceFee: FlexibleDecimal?
-}
-
-struct OrderConfirmResultDTO: Decodable {
-    let message: String?
-    let breakdown: SettlementBreakdownDTO?
-}
-
-struct OrderPartialResultDTO: Decodable {
-    let message: String?
-    let originalOrderId: String?
-    let settledPrice: FlexibleDecimal?
-    let remainingDemandId: String?
-}
-
-struct SettlementBreakdownDTO: Decodable {
-    let minPrice: FlexibleDecimal?
-    let finalPrice: FlexibleDecimal?
-    let serviceFee: FlexibleDecimal?
-    let demanderPaid: FlexibleDecimal?
-    let providerReceived: FlexibleDecimal?
-    let platformRevenue: FlexibleDecimal?
-    let depositReturned: FlexibleDecimal?
-}
-
 enum OrderMapper {
     static func map(_ dto: OrderDTO) -> Order {
         let deal = dto.agreedPrice?.value ?? dto.demand?.minPrice?.value ?? 0
-        let escrow = dto.demand?.minPrice?.value ?? deal
-        let remaining = max(0, deal - escrow)
-        let fee = (deal * Decimal(string: "0.05")!).rounded(scale: 2)
+        let minPrice = dto.demand?.minPrice?.value ?? deal
+        // 托管金额只信服务端 deposit / escrow*；缺失时列表显示 0 并标注，禁止用 minPrice 冒充应付。
+        let depositFromDemand = dto.demand?.deposit?.value
+        let escrow =
+            dto.escrowAmount?.value
+            ?? dto.escrowRequired?.value
+            ?? dto.depositRequired?.value
+            ?? depositFromDemand
+        let remaining =
+            dto.remainingPay?.value
+            ?? (escrow.map { max(0, deal - $0) })
+        let fee = dto.serviceFee?.value
+        let amountsFromServer = escrow != nil
 
         let demandStub = Demand(
             id: dto.demand?.id ?? dto.demandId ?? dto.id,
             title: dto.demand?.title ?? "订单需求",
             expectedOutcome: dto.demand?.description ?? "",
-            minPrice: escrow,
+            minPrice: minPrice,
             expectedPrice: deal,
+            deposit: depositFromDemand ?? escrow,
             distanceText: "—",
             countdownText: "—",
             applicantCount: 0,
@@ -119,6 +126,15 @@ enum OrderMapper {
             isCertifiedOnly: false,
             allowNearby: true
         )
+
+        let hint: String
+        if let version = dto.ruleVersion, !version.isEmpty {
+            hint = "规则 \(version)"
+        } else if amountsFromServer {
+            hint = dto.status
+        } else {
+            hint = "金额以付款预览为准"
+        }
 
         return Order(
             id: dto.id,
@@ -132,10 +148,11 @@ enum OrderMapper {
             completedAt: dto.completedAt,
             submittedAtText: APIDate.relativeOrTime(dto.createdAt),
             dealAmount: deal,
-            escrowAmount: escrow,
-            remainingPay: remaining,
-            serviceFee: fee,
-            amountHint: dto.status
+            escrowAmount: escrow ?? 0,
+            remainingPay: remaining ?? 0,
+            serviceFee: fee ?? 0,
+            amountHint: hint,
+            amountsFromServer: amountsFromServer
         )
     }
 
@@ -143,24 +160,15 @@ enum OrderMapper {
         AppUser.from(user)
     }
 
-    private static func stage(from status: String) -> Order.Stage {
+    static func stage(from status: String) -> Order.Stage {
         switch status.uppercased() {
         case "PENDING": .accepted
         case "IN_PROGRESS": .inProgress
         case "WAITING_REVIEW": .waitingReview
         case "COMPLETED": .completed
         case "DISPUTED": .disputed
-        case "CANCELLED", "REFUNDED": .completed
+        case "CANCELLED", "REFUNDED": .cancelled
         default: .inProgress
         }
-    }
-}
-
-private extension Decimal {
-    func rounded(scale: Int) -> Decimal {
-        var value = self
-        var result = Decimal()
-        NSDecimalRound(&result, &value, scale, .plain)
-        return result
     }
 }

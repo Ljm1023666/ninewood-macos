@@ -90,6 +90,38 @@ final class UserService {
         return try await client.put("/users/profile", body: Body(nickname: nickname, bio: bio))
     }
 
+    func updateProfileMultipart(
+        nickname: String? = nil,
+        bio: String? = nil,
+        avatar: MultipartFile? = nil,
+        cover: MultipartFile? = nil
+    ) async throws -> SoftUserDTO {
+        var fields: [String: String] = [:]
+        if let nickname { fields["nickname"] = nickname }
+        if let bio { fields["bio"] = bio }
+        var files: [MultipartFile] = []
+        if let avatar { files.append(avatar) }
+        if let cover { files.append(cover) }
+        return try await client.putMultipart("/users/profile", fields: fields, files: files)
+    }
+
+    func toggleFavoriteCard(cardId: String) async throws {
+        struct OK: Decodable { let favorited: Bool? }
+        let _: OK = try await client.post("/users/favorites/cards/\(cardId)")
+    }
+
+    func favoriteCards(page: Int = 1) async throws -> [ServiceCardDTO] {
+        struct Page: Decodable {
+            let cards: [ServiceCardDTO]?
+            let items: [ServiceCardDTO]?
+        }
+        let pageData: Page = try await client.get(
+            "/users/favorites/cards",
+            query: [URLQueryItem(name: "page", value: String(page))]
+        )
+        return pageData.cards ?? pageData.items ?? []
+    }
+
     func myTags() async throws -> [String] {
         struct TagsDTO: Decodable { let tags: [String]? }
         let dto: TagsDTO = try await client.get("/users/tags")
@@ -135,5 +167,32 @@ final class UserService {
 
     func snatchStatus() async throws -> SnatchStatusDTO {
         try await client.get("/users/snatch-status")
+    }
+
+    func fetchPushPreferences() async throws -> PushPreferenceDTO {
+        try await client.get("/pushes/preferences")
+    }
+
+    func updatePushPreferences(
+        receivePushes: Bool? = nil,
+        pushFrequency: String? = nil,
+        excludeKeywords: [String]? = nil,
+        excludeTags: [String]? = nil
+    ) async throws -> PushPreferenceDTO {
+        struct Body: Encodable {
+            let receivePushes: Bool?
+            let pushFrequency: String?
+            let excludeKeywords: [String]?
+            let excludeTags: [String]?
+        }
+        return try await client.put(
+            "/pushes/preferences",
+            body: Body(
+                receivePushes: receivePushes,
+                pushFrequency: pushFrequency,
+                excludeKeywords: excludeKeywords,
+                excludeTags: excludeTags
+            )
+        )
     }
 }

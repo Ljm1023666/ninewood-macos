@@ -11,9 +11,9 @@ struct ninewood_macosApp: App {
                 .environment(session.authSession)
                 .environment(session.inbox)
                 .tint(AppTheme.primary)
-                .frame(minWidth: 1000, minHeight: 640)
+                .frame(minWidth: 1120, minHeight: 760)
         }
-        .defaultSize(width: 1280, height: 800)
+        .defaultSize(width: 1440, height: 1024)
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandMenu("九木") {

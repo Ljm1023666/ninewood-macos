@@ -1,0 +1,43 @@
+# 九木平台数据真实性清单
+# status: real=可作为事实；partial=可用但覆盖不完整；stub=禁止作为事实
+meta:
+  version: "1.0"
+  audited: "2026-07-17"
+  policy: "助手只能把 real 数据表述为确定事实；partial 必须说明覆盖范围；stub 不得参与结论。"
+
+domains:
+  - id: region_catalog
+    status: real
+    keywords: [地域, 地区, 城市, 行政区划]
+    applies_to: [search_demands, analyze_market]
+    evidence: "Region 表有 75 条正式行政区划记录。"
+    assistant_policy: "可以引用目录中的地区名称，但不能推断目录之外的覆盖。"
+
+  - id: demand_region
+    status: real
+    keywords: [需求地域, 本地需求, 同城需求]
+    applies_to: [search_demands, get_demand_detail, analyze_demand, analyze_market]
+    evidence: "生产库 10133 条需求均有 regionId。"
+    assistant_policy: "可以按需求地域筛选和分析。"
+
+  - id: provider_region
+    status: stub
+    keywords: [服务者地域, 附近服务者, 同城服务者]
+    applies_to: [search_users, analyze_providers, analyze_market]
+    evidence: "ServiceCard 的 regionId 覆盖为 0；User.cityCode 虽有 849 条，但不能代表服务能力覆盖。"
+    assistant_policy: "禁止声称已按服务者地域完成可靠匹配；应明确告知该维度尚未完整接入。"
+
+  - id: tag_statistics
+    status: partial
+    keywords: [行情, 市场, 标签统计, 均价, 成交量]
+    applies_to: [analyze_market, analyze_demand]
+    evidence: "TagStats 有 30 条聚合记录，数据量与时间窗口不足以代表完整市场。"
+    assistant_policy: "可以给趋势参考，但必须标注样本覆盖有限，不得称为全市场结论。"
+
+  - id: welfare_region
+    status: partial
+    keywords: [公益, 福利, 激励, 地区资金池]
+    applies_to: [analyze_market]
+    evidence: "地区资金池会按 regionId 自动创建，但部分余额可能只是初始化值。"
+    assistant_policy: "只能陈述接口返回的当前值，并注明功能处于内测。"
+

@@ -40,6 +40,9 @@ struct Demand: Identifiable, Hashable {
     var expectedOutcome: String
     var minPrice: Decimal
     var expectedPrice: Decimal?
+    var deposit: Decimal? = nil
+    var mediaUrls: [String] = []
+    var lifecycleStage: String? = nil
     var distanceText: String
     var countdownText: String
     var applicantCount: Int
@@ -56,6 +59,8 @@ struct Demand: Identifiable, Hashable {
     var hasRequested: Bool = false
     var hasOrder: Bool = false
     var coverImageUrl: String?
+    /// 我的应标列表中对应的申请 ID（用于撤回）
+    var applicationId: String? = nil
 
     /// 列表预览用封面（仅需求自身图）。详情页不再重复展示装饰图。
     var listCoverMediaURL: URL? {
@@ -137,6 +142,7 @@ struct Order: Identifiable, Hashable {
         case waitingReview
         case completed
         case disputed
+        case cancelled
 
         var title: String {
             switch self {
@@ -145,6 +151,7 @@ struct Order: Identifiable, Hashable {
             case .waitingReview: "待验收"
             case .completed: "已完成"
             case .disputed: "争议"
+            case .cancelled: "已取消"
             }
         }
     }
@@ -164,10 +171,25 @@ struct Order: Identifiable, Hashable {
     var remainingPay: Decimal
     var serviceFee: Decimal
     var amountHint: String
+    /// 为 false 时，服务费等分项尚未经服务端资金字段确认，不得用于付款确认文案。
+    var amountsFromServer: Bool = false
 
     /// 预付服务费后，验收时跳过服务费；未预付则验收时一并收取
     var totalDue: Decimal { paidAt == nil ? remainingPay + serviceFee : remainingPay }
     var isPrepaid: Bool { paidAt != nil }
+
+    var escrowDisplayText: String {
+        amountsFromServer ? escrowAmount.currencyText : "—"
+    }
+
+    var remainingPayDisplayText: String {
+        amountsFromServer ? remainingPay.currencyText : "—"
+    }
+
+    var serviceFeeDisplayText: String {
+        if serviceFee > 0 { return serviceFee.currencyText }
+        return amountsFromServer ? "打开预付查看服务端分项" : "—"
+    }
 }
 
 struct ChatThread: Identifiable, Hashable {
@@ -180,13 +202,55 @@ struct ChatThread: Identifiable, Hashable {
     var isCommunicating: Bool
     var isSystem: Bool
     var remainingCommText: String?
+    var communication: CommunicationContext? = nil
+}
+
+struct CommunicationContext: Hashable {
+    let applicantID: String
+    let demandID: String
+    let demandTitle: String
+    let deadline: Date?
+    let canExtend: Bool
+    let extensionMinutes: Int
+
+    func remainingText(at date: Date = Date()) -> String {
+        guard let deadline else { return "沟通中" }
+        let seconds = deadline.timeIntervalSince(date)
+        guard seconds > 0 else { return "沟通窗口已到期" }
+        let minutes = max(1, Int(ceil(seconds / 60)))
+        return "剩余约 \(minutes) 分钟"
+    }
+}
+
+struct ChatCardAttachment: Hashable {
+    enum Kind: String, Hashable {
+        case demand = "DEMAND"
+        case serviceCard = "SERVICE_CARD"
+        case unknown
+    }
+
+    let id: String
+    let kind: Kind
+    let cardID: String?
+    let title: String
+    let summary: String?
+    let price: Decimal?
+    let status: String?
+    let coverImage: String?
+    let isMine: Bool
+}
+
+struct ChatBubbleSender: Hashable {
+    let userId: String
+    let name: String
+    let avatarURL: URL?
 }
 
 enum ChatBubbleKind: Hashable {
     case system(String)
     case time(String)
-    case text(String, isMine: Bool)
-    case demandCard
+    case text(String, isMine: Bool, sender: ChatBubbleSender?)
+    case card(ChatCardAttachment, sender: ChatBubbleSender?)
 }
 
 struct WalletEscrowItem: Identifiable, Hashable {

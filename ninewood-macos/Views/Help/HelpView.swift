@@ -1,7 +1,8 @@
 import SwiftUI
 
 struct HelpView: View {
-    @State private var selectedCategory: HelpFAQ.Category = HelpFAQ.Category.categories[0]
+    @Environment(AppSession.self) private var session
+    @State private var selectedCategory: HelpFAQ.Category = .order
     @State private var selectedEntry: HelpFAQ.Entry?
 
     var body: some View {
@@ -53,21 +54,47 @@ struct HelpView: View {
                         VStack(alignment: .leading, spacing: 16) {
                             Text(selectedEntry.question)
                                 .font(.title2.bold())
+                            Text("更新于 2025-05-20 11:30")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                             Text(selectedEntry.intro)
                                 .foregroundStyle(.secondary)
                             if !selectedEntry.steps.isEmpty {
                                 VStack(alignment: .leading, spacing: 12) {
-                                    ForEach(Array(selectedEntry.steps.enumerated()), id: \.offset) { index, step in
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text("\(index + 1). \(step.title)")
-                                                .font(.headline)
-                                            Text(step.content)
-                                                .foregroundStyle(.secondary)
+                                    Text("结算全流程（四步）")
+                                        .font(.headline)
+                                    ForEach(Array(selectedEntry.steps.prefix(4).enumerated()), id: \.offset) { index, step in
+                                        HStack(alignment: .top, spacing: 12) {
+                                            Text("\(index + 1)")
+                                                .font(.caption.weight(.bold))
+                                                .foregroundStyle(.white)
+                                                .frame(width: 24, height: 24)
+                                                .background(AppTheme.openStatus, in: Circle())
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(step.title)
+                                                    .font(.headline)
+                                                Text(step.content)
+                                                    .foregroundStyle(.secondary)
+                                            }
                                         }
                                     }
                                 }
                                 .padding(16)
                                 .ninewoodCard()
+                            }
+                            if selectedEntry.id == "how-orders-work" {
+                                helpSafetyCallout
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("相关链接").font(.headline)
+                                    ForEach(["托管规则说明", "争议处理流程", "钱包流水查询"], id: \.self) { link in
+                                        Button(link) {
+                                            openHelpRelatedLink(link)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundStyle(AppTheme.primary)
+                                        .font(.caption)
+                                    }
+                                }
                             }
                         }
                         .padding(AppTheme.horizontalPadding)
@@ -94,6 +121,45 @@ struct HelpView: View {
         }
         .onChange(of: selectedCategory) { _, newValue in
             selectedEntry = HelpFAQ.entries(in: newValue).first
+        }
+    }
+
+    private func openHelpRelatedLink(_ link: String) {
+        switch link {
+        case "托管规则说明":
+            selectedCategory = .order
+            selectedEntry = HelpFAQ.entries(in: .order).first { $0.id == "escrow-fee" }
+                ?? HelpFAQ.entries(in: .order).first
+        case "争议处理流程":
+            selectedCategory = .order
+            selectedEntry = HelpFAQ.entries(in: .order).first { $0.id == "how-orders-work" }
+            _ = session.navigation.navigate(to: "/orders")
+        case "钱包流水查询":
+            _ = session.navigation.navigate(to: "/transactions")
+        default:
+            break
+        }
+    }
+
+    private var helpSafetyCallout: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "shield.checkered")
+                .font(.title3)
+                .foregroundStyle(AppTheme.openStatus)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("安全提示")
+                    .font(.headline)
+                Text("请在平台内完成全部交易与沟通，切勿进行线下转账或绕过托管的私下交易。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.openStatus.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(AppTheme.openStatus.opacity(0.25))
         }
     }
 }
@@ -168,26 +234,39 @@ enum HelpFAQ {
             id: "how-to-discover",
             category: .discover,
             question: "如何发现附近需求？",
-            intro: "「发现」展示附近可申请的需求；「卡池」汇总进行中的需求。",
+            intro: "「发现」展示附近可申请的需求；正式成单只走「请求接单 → 发布者接受」。",
             steps: [
-                Step(title: "发现", content: "浏览列表并打开详情，可请求接单。"),
-                Step(title: "卡池", content: "查看可竞价 / 可接的公开需求池。"),
+                Step(title: "发现", content: "浏览列表并打开详情，点击「请求接单」进入沟通。"),
+                Step(title: "正式接单", content: "仅当需求方在「我的需求」中接受申请后才会生成订单；卡池「应标 / 抢单」不是成单主链。"),
+                Step(title: "卡池", content: "可查看公开需求并提交意向报价，但不会直接变成订单。"),
             ]
         ),
         Entry(
             id: "how-orders-work",
             category: .order,
             question: "订单与托管如何结算？",
-            intro: "发布时托管最低保障金额；进行中预付 5% 服务费；服务者标记完成后需验收确认，平台再结算托管资金。",
+            intro: "发布时托管最低保障金额；进行中按服务端付款预览预付服务费；服务者标记完成后需验收确认，平台再结算托管资金。",
             steps: [
-                Step(title: "发布托管", content: "发布需求时，最低保障金额（minPrice）会预付至平台托管。"),
-                Step(title: "进行中预付", content: "订单进入进行中后，平台会预付 5% 服务费至托管账户。"),
+                Step(title: "发布托管", content: "发布需求时，最低保障金额会预付至平台托管（以服务端 deposit 为准）。"),
+                Step(title: "两段式成单", content: "服务方请求接单 → 需求方接受申请 → 生成订单。不要把应标/抢单当成已成交。"),
+                Step(title: "进行中预付", content: "订单进入进行中后，打开付款页查看服务端分项再确认预付服务费。"),
                 Step(title: "服务者完成", content: "服务者标记完成后，订单进入待验收状态。"),
                 Step(title: "验收结算", content: "需求方验收确认后，平台按约定结算托管资金给服务者。"),
-                Step(title: "部分完成", content: "若仅部分完成，可按 partial 比例结算，剩余托管退回。"),
-                Step(title: "取消退款", content: "取消订单时，已预付的服务费会退回需求方。"),
+                Step(title: "部分完成", content: "服务方可按已完成部分提交结算金额与说明；余量与退款以服务端结算结果为准。"),
+                Step(title: "取消退款", content: "取消订单时，已预付的服务费会按平台规则退回需求方。"),
             ]
         ),
+        Entry(id: "escrow-fee", category: .order, question: "托管费用如何计算？", intro: "托管费用以付款预览和服务端实时计算为准。", steps: []),
+        Entry(id: "preview-change", category: .order, question: "为什么预览金额会变化？", intro: "金额会随时间、数量和费用规则动态变化。", steps: []),
+        Entry(id: "offline-transfer", category: .order, question: "可以线下交易或转账吗？", intro: "平台不支持绕过托管的线下充值或转账。", steps: []),
+        Entry(id: "partial-settle", category: .order, question: "部分完成如何结算？", intro: "可按完成比例提交结算并由双方确认。", steps: []),
+        Entry(id: "order-dispute", category: .order, question: "对订单有异议怎么办？", intro: "在验收期内发起争议并提供相关证据。", steps: []),
+        Entry(id: "escrow-detail", category: .order, question: "如何查看托管资金明细？", intro: "在订单或钱包中查看托管与结算记录。", steps: []),
+        Entry(id: "payer-cancel", category: .order, question: "付款方可以取消订单吗？", intro: "取消能力由当前订单状态和服务端规则决定。", steps: []),
+        Entry(id: "natural-loop", category: .order, question: "什么是自然回？", intro: "自然回提供可验证、可复用的自动化结果。", steps: []),
+        Entry(id: "refund", category: .order, question: "如何申请退款？", intro: "符合条件时可在订单详情中发起退款。", steps: []),
+        Entry(id: "escrow-timeout", category: .order, question: "托管超时会怎样？", intro: "平台会依据订单状态和规则自动处理。", steps: []),
+        Entry(id: "export-proof", category: .order, question: "如何导出订单凭证？", intro: "订单完成后可下载交易与结算凭证。", steps: []),
         Entry(
             id: "how-cert",
             category: .cert,
@@ -202,10 +281,10 @@ enum HelpFAQ {
             id: "how-messages",
             category: .social,
             question: "如何沟通与进圈子？",
-            intro: "请求接单后可在「消息」沟通；「圈子」可浏览公开圈并加入。",
+            intro: "请求接单后可在「消息」沟通；初期圈子为私人圈，需邀请码加入。",
             steps: [
                 Step(title: "消息", content: "支持实时推送（在线时无需手动刷新）。"),
-                Step(title: "圈子", content: "公开列表加入，或使用邀请码。"),
+                Step(title: "圈子", content: "在「圈子」创建私人圈，或使用邀请码加入。"),
             ]
         ),
         Entry(

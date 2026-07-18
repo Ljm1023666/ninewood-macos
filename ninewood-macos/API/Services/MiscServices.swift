@@ -107,15 +107,39 @@ final class CertificationService {
         self.client = client
     }
 
-    func register(tags: [String], regionId: Int? = nil) async throws {
+    func uploadProof(file: MultipartFile) async throws -> String {
+        struct Payload: Decodable { let url: String? }
+        let payload: Payload = try await client.postMultipart(
+            "/certification/uploads/proof",
+            fields: [:],
+            files: [MultipartFile(
+                fieldName: "file",
+                fileName: file.fileName,
+                mimeType: file.mimeType,
+                data: file.data
+            )]
+        )
+        guard let url = payload.url, !url.isEmpty else {
+            throw APIError.server(
+                statusCode: 500,
+                errorCode: nil,
+                message: "证明材料上传失败",
+                requestID: nil
+            )
+        }
+        return url
+    }
+
+    func register(tags: [String], regionId: Int? = nil, proofUrls: [String]? = nil) async throws {
         struct Body: Encodable {
             let tags: [String]
             let regionId: Int?
+            let proofUrls: [String]?
         }
         struct OK: Decodable {}
         let _: OK = try await client.post(
             "/certification/register",
-            body: Body(tags: tags, regionId: regionId)
+            body: Body(tags: tags, regionId: regionId, proofUrls: proofUrls)
         )
     }
 
@@ -143,6 +167,9 @@ final class CertificationService {
 
 @MainActor
 final class CaptchaService {
+    /// 与生产端 `UNCONFIGURED_CAPTCHA_TOKEN` 对齐
+    static let unconfiguredBypassToken = "unconfigured-bypass"
+
     private let client: APIClient
 
     init(client: APIClient) {
@@ -152,5 +179,25 @@ final class CaptchaService {
     func siteKey() async throws -> String {
         let dto: CaptchaSiteKeyDTO = try await client.get("/captcha")
         return dto.siteKey ?? ""
+    }
+
+    func status() async throws -> CaptchaSiteKeyDTO {
+        try await client.get("/captcha")
+    }
+
+    /// 取得可用于 `/auth/send-code` 的 captchaToken。
+    /// 当前生产未配置 hCaptcha 时走 bypass；配置后需接入原生人机验证。
+    func obtainSendCodeToken() async throws -> String {
+        let status = try await status()
+        let siteKey = status.siteKey ?? ""
+        if siteKey.isEmpty || status.mode == "bypass" {
+            return Self.unconfiguredBypassToken
+        }
+        throw APIError.server(
+            statusCode: 400,
+            errorCode: nil,
+            message: "当前客户端尚未接入图形验证码，请稍后再试或联系管理员配置",
+            requestID: nil
+        )
     }
 }

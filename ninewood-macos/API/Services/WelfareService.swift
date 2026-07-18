@@ -15,14 +15,14 @@ final class WelfareService {
 
     func claim(demandId: String) async throws {
         struct OK: Decodable {}
-        let _: OK = try await client.post("/welfare/demands/\(demandId)/claim")
+        // 生产现行路由：POST /api/welfare/claim/:demandId（非 /welfare/demands/:id/claim）
+        let _: OK = try await client.post("/welfare/claim/\(demandId)")
     }
 
-    func rewards(page: Int = 1) async throws -> [WelfareItemDTO] {
-        let pageData: WelfareListPage = try await client.get(
+    func rewards(page: Int = 1) async throws -> WelfareRewardsPage {
+        try await client.get(
             "/welfare/rewards",
             query: [URLQueryItem(name: "page", value: String(page))]
         )
-        return pageData.rows
     }
 }
