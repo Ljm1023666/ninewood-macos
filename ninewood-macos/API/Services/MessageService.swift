@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-final class MessageService {
+final class MessageService: MessageUnreadCounting {
     private let client: APIClient
 
     init(client: APIClient) {
@@ -21,8 +21,21 @@ final class MessageService {
         return list.map { MessageMapperSupport.mapBubble($0, myUserId: myUserId) }
     }
 
-    func send(toUserId: String, content: String) async throws -> MessageDTO {
-        try await client.post("/messages/send", body: SendMessageBody(toUserId: toUserId, content: content))
+    func send(toUserId: String, content: String, file: MultipartFile? = nil) async throws -> MessageDTO {
+        if let file {
+            return try await client.postMultipart(
+                "/messages/send",
+                fields: [
+                    "toUserId": toUserId,
+                    "content": content
+                ],
+                files: [file]
+            )
+        }
+        return try await client.post(
+            "/messages/send",
+            body: SendMessageBody(toUserId: toUserId, content: content)
+        )
     }
 
     func unreadCount() async throws -> Int {

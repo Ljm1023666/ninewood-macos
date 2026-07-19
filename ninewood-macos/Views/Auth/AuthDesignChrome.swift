@@ -304,20 +304,35 @@ struct AuthSecurityBanner: View {
 
 struct AuthLegalLine: View {
     var prefix: String = "登录即表示您同意"
+    @State private var legalKind: LegalDocView.Kind?
+
     var body: some View {
-        (
+        HStack(spacing: 0) {
             Text(prefix)
                 .foregroundStyle(AppTheme.secondaryLabel)
-            + Text("《用户协议》")
+            Button("《用户协议》") { legalKind = .terms }
+                .buttonStyle(.plain)
                 .foregroundStyle(AuthDesign.brand)
-            + Text("和")
+            Text("和")
                 .foregroundStyle(AppTheme.secondaryLabel)
-            + Text("《隐私政策》")
+            Button("《隐私政策》") { legalKind = .privacy }
+                .buttonStyle(.plain)
                 .foregroundStyle(AuthDesign.brand)
-        )
+        }
         .font(.system(size: 11))
         .frame(maxWidth: .infinity, alignment: .center)
         .multilineTextAlignment(.center)
+        .sheet(item: $legalKind) { kind in
+            NavigationStack {
+                LegalDocView(kind: kind)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("关闭") { legalKind = nil }
+                        }
+                    }
+            }
+            .frame(minWidth: 480, minHeight: 420)
+        }
     }
 }
 
@@ -473,6 +488,7 @@ struct AuthRegisterFormLayout<
     @Binding var password: String
     @Binding var confirmPassword: String
     @Binding var acceptedTerms: Bool
+    @State private var legalKind: LegalDocView.Kind?
     @ViewBuilder var backAction: () -> BackAction
     @ViewBuilder var codeTrailing: () -> CodeTrailing
     @ViewBuilder var primaryAction: () -> PrimaryAction
@@ -560,17 +576,30 @@ struct AuthRegisterFormLayout<
                     HStack(spacing: 0) {
                         Text("我已阅读并同意")
                             .foregroundStyle(AppTheme.secondaryLabel)
-                        Text("《用户协议》")
+                        Button("《用户协议》") { legalKind = .terms }
+                            .buttonStyle(.plain)
                             .foregroundStyle(AuthDesign.brand)
                         Text("和")
                             .foregroundStyle(AppTheme.secondaryLabel)
-                        Text("《隐私政策》")
+                        Button("《隐私政策》") { legalKind = .privacy }
+                            .buttonStyle(.plain)
                             .foregroundStyle(AuthDesign.brand)
                     }
                     .font(.system(size: 12))
                 }
                 .toggleStyle(.checkbox)
                 .padding(.top, 18)
+                .sheet(item: $legalKind) { kind in
+                    NavigationStack {
+                        LegalDocView(kind: kind)
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("关闭") { legalKind = nil }
+                                }
+                            }
+                    }
+                    .frame(minWidth: 480, minHeight: 420)
+                }
 
                 primaryAction()
                     .padding(.top, 16)

@@ -684,14 +684,14 @@ private struct AgentConversationDetailView: View {
             role: "user",
             content: text
         )
-        if detail != nil {
+        if let existingDetail = detail {
             detail = AgentConversationDetailDTO(
-                id: detail!.id,
-                title: detail!.title,
-                thinkMode: detail!.thinkMode,
-                createdAt: detail!.createdAt,
-                updatedAt: detail!.updatedAt,
-                messages: detail!.messages + [userMessage]
+                id: existingDetail.id,
+                title: existingDetail.title,
+                thinkMode: existingDetail.thinkMode,
+                createdAt: existingDetail.createdAt,
+                updatedAt: existingDetail.updatedAt,
+                messages: existingDetail.messages + [userMessage]
             )
         } else {
             detail = AgentConversationDetailDTO(

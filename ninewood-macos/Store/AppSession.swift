@@ -156,9 +156,11 @@ final class AppSession {
         )
     }
 
-    func sendRegistrationCode(phone: String) async throws -> SendCodeResultDTO {
-        let token = try await captchaService.obtainSendCodeToken()
-        return try await authService.sendCode(phone: phone, captchaToken: token)
+    func sendRegistrationCode(
+        phone: String,
+        captchaToken: String
+    ) async throws -> SendCodeResultDTO {
+        try await authService.sendCode(phone: phone, captchaToken: captchaToken)
     }
 
     func logout() async {

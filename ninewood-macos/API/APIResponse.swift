@@ -423,6 +423,12 @@ struct CaptchaSiteKeyDTO: Decodable {
     let mode: String?
 }
 
+struct CaptchaVerifyDTO: Decodable {
+    let success: Bool
+    let token: String
+    let message: String?
+}
+
 struct RegionDTO: Decodable, Identifiable {
     let id: Int
     let name: String?

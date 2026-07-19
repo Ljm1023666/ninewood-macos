@@ -1,4 +1,11 @@
 import Foundation
+import Observation
+
+protocol APITokenStore {
+    func load() -> String?
+    func save(_ token: String)
+    func delete()
+}
 
 @Observable
 @MainActor
@@ -13,20 +20,25 @@ final class APIClient {
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    private let tokenStore: any APITokenStore
 
-    init(session: URLSession = .shared) {
+    init(
+        session: URLSession = .shared,
+        tokenStore: any APITokenStore = KeychainTokenStore()
+    ) {
         self.session = session
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
-        self.authToken = KeychainTokenStore.load()
+        self.tokenStore = tokenStore
+        self.authToken = tokenStore.load()
     }
 
     func setAuthToken(_ token: String?) {
         authToken = token
         if let token {
-            KeychainTokenStore.save(token)
+            tokenStore.save(token)
         } else {
-            KeychainTokenStore.delete()
+            tokenStore.delete()
         }
     }
 
@@ -121,14 +133,17 @@ final class APIClient {
         let boundary = "Boundary-\(UUID().uuidString)"
         var body = Data()
         for (key, value) in fields {
+            let safeKey = multipartDispositionToken(key)
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(safeKey)\"\r\n\r\n".data(using: .utf8)!)
             body.append("\(value)\r\n".data(using: .utf8)!)
         }
         for file in files {
+            let safeFieldName = multipartDispositionToken(file.fieldName)
+            let safeFileName = multipartDispositionToken(file.fileName)
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
             body.append(
-                "Content-Disposition: form-data; name=\"\(file.fieldName)\"; filename=\"\(file.fileName)\"\r\n"
+                "Content-Disposition: form-data; name=\"\(safeFieldName)\"; filename=\"\(safeFileName)\"\r\n"
                     .data(using: .utf8)!
             )
             body.append("Content-Type: \(file.mimeType)\r\n\r\n".data(using: .utf8)!)
@@ -146,6 +161,13 @@ final class APIClient {
         prepareCommonHeaders(for: &request, idempotencyKey: idempotencyKey)
         request.httpBody = body
         return try await perform(request)
+    }
+
+    private func multipartDispositionToken(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\r", with: "_")
+            .replacingOccurrences(of: "\n", with: "_")
+            .replacingOccurrences(of: "\"", with: "_")
     }
 
     func healthCheck() async throws -> Bool {

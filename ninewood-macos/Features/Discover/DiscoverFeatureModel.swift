@@ -1,6 +1,18 @@
 import Foundation
 import Observation
 
+@MainActor
+protocol DemandDiscovering {
+    func discover(
+        page: Int,
+        limit: Int,
+        keyword: String?,
+        lat: Double?,
+        lng: Double?,
+        distanceKm: Double?
+    ) async throws -> [Demand]
+}
+
 @Observable
 @MainActor
 final class DiscoverFeatureModel {
@@ -9,10 +21,10 @@ final class DiscoverFeatureModel {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
-    private let repository: DemandRepository?
+    private let repository: (any DemandDiscovering)?
     private let previewDemands: [Demand]?
 
-    init(repository: DemandRepository) {
+    init(repository: any DemandDiscovering) {
         self.repository = repository
         self.previewDemands = nil
     }
@@ -45,6 +57,8 @@ final class DiscoverFeatureModel {
             let lat: Double? = nearbyOnly ? 31.2304 : nil
             let lng: Double? = nearbyOnly ? 121.4737 : nil
             let rows = try await repository.discover(
+                page: 1,
+                limit: 20,
                 keyword: keyword,
                 lat: lat,
                 lng: lng,

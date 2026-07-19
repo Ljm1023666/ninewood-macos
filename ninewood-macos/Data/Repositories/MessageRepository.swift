@@ -2,7 +2,7 @@ import Foundation
 
 /// 消息领域的数据入口；实时事件仍由 ChatRealtime 提供，历史记录以 API 为准。
 @MainActor
-final class MessageRepository {
+final class MessageRepository: ConversationListing {
     private let service: MessageService
 
     init(service: MessageService) {
@@ -17,8 +17,9 @@ final class MessageRepository {
         try await service.messages(with: peerID, myUserId: currentUserID, page: page)
     }
 
-    func send(peerID: String, content: String) async throws {
-        _ = try await service.send(toUserId: peerID, content: content)
+    @discardableResult
+    func send(peerID: String, content: String, file: MultipartFile? = nil) async throws -> MessageDTO {
+        try await service.send(toUserId: peerID, content: content, file: file)
     }
 
     func unreadCount() async throws -> Int {

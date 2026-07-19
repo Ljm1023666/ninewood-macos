@@ -2,7 +2,7 @@ import Foundation
 
 /// 需求领域的数据入口。View / FeatureModel 不再直接依赖路由级 Service。
 @MainActor
-final class DemandRepository {
+final class DemandRepository: DemandDiscovering {
     private let service: DemandService
 
     init(service: DemandService) {
@@ -41,6 +41,16 @@ final class DemandRepository {
 
     func mine(page: Int = 1) async throws -> [Demand] {
         try await service.myDemands(page: page)
+    }
+
+    func listDrafts(page: Int = 1) async throws -> [Demand] {
+        try await service.listDrafts(page: page)
+    }
+
+    @discardableResult
+    func publishDraft(id: String) async throws -> Demand {
+        let dto = try await service.publishDraft(id: id)
+        return DemandMapper.mapDetail(dto)
     }
 
     func myApplications(page: Int = 1) async throws -> [Demand] {

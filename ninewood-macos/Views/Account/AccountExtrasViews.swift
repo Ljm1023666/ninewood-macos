@@ -2351,9 +2351,10 @@ struct SettingsView: View {
     }
 }
 
-private struct LegalDocView: View {
-    enum Kind {
+struct LegalDocView: View {
+    enum Kind: String, Identifiable {
         case privacy, terms, licenses
+        var id: String { rawValue }
         var title: String {
             switch self {
             case .privacy: "隐私政策"

@@ -41,8 +41,9 @@ enum APIConfig {
     /// 将 API 返回的相对路径解析为可加载的 HTTPS URL。
     static func mediaURL(_ path: String?) -> URL? {
         guard let path, !path.isEmpty else { return nil }
-        if path.hasPrefix("http://") || path.hasPrefix("https://") {
-            return URL(string: path)
+        if let absolute = URL(string: path), absolute.scheme != nil {
+            guard absolute.scheme?.lowercased() == "https" else { return nil }
+            return absolute
         }
         if path.hasPrefix("/") {
             return mediaBaseURL.appending(path: String(path.dropFirst()))

@@ -16,6 +16,33 @@ struct MergeChatMemberDTO: Decodable, Hashable {
     let userId: String
     let mergeId: String?
     let createdAt: String?
+    let mutedAt: String?
+    let user: SoftUserDTO?
+
+    init(
+        id: String? = nil,
+        userId: String,
+        mergeId: String? = nil,
+        createdAt: String? = nil,
+        mutedAt: String? = nil,
+        user: SoftUserDTO? = nil
+    ) {
+        self.id = id
+        self.userId = userId
+        self.mergeId = mergeId
+        self.createdAt = createdAt
+        self.mutedAt = mutedAt
+        self.user = user
+    }
+
+    var displayName: String {
+        let nick = user?.nickname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !nick.isEmpty { return nick }
+        if userId.count <= 8 { return userId }
+        return String(userId.prefix(8))
+    }
+
+    var avatarMediaURL: URL? { user?.avatarMediaURL }
 }
 
 struct MergeChatDTO: Decodable, Identifiable, Hashable {

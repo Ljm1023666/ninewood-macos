@@ -33,6 +33,10 @@ final class ChatDetailFeatureModel {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
     }
 
+    var canAttachMedia: Bool {
+        !isSending && !isPreview
+    }
+
     func load() async {
         guard !isPreview else { return }
         guard !isLoading else { return }
@@ -62,9 +66,31 @@ final class ChatDetailFeatureModel {
         defer { isSending = false }
 
         do {
-            try await repository.send(peerID: thread.peer.id, content: content)
+            let dto = try await repository.send(peerID: thread.peer.id, content: content)
             draft = ""
-            bubbles.append(.text(content, isMine: true, sender: nil))
+            bubbles.append(MessageMapperSupport.mapBubble(dto, myUserId: currentUserID))
+        } catch {
+            errorMessage = Self.message(for: error)
+        }
+    }
+
+    func sendImage(data: Data, fileName: String, mimeType: String) async {
+        guard !isSending, !isPreview else { return }
+        isSending = true
+        defer { isSending = false }
+        do {
+            let file = MultipartFile(
+                fieldName: "file",
+                fileName: fileName,
+                mimeType: mimeType,
+                data: data
+            )
+            let dto = try await repository.send(
+                peerID: thread.peer.id,
+                content: "[图片]",
+                file: file
+            )
+            bubbles.append(MessageMapperSupport.mapBubble(dto, myUserId: currentUserID))
         } catch {
             errorMessage = Self.message(for: error)
         }

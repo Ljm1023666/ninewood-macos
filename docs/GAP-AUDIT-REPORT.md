@@ -30,7 +30,7 @@
 
 | 来源 | 结果摘要 |
 |------|----------|
-| `swift test`（固定 Xcode） | **28** 项领域/DTO 测试通过（非清单旧称 22） |
+| `swift test`（固定 Xcode） | **72** 项领域、DTO、网络、会话、未读与主列表 Feature Model 测试通过 |
 | 生产 `/health/services` | `degraded`：Express/PG/Redis online；语义分类器 offline；Vite offline（预期） |
 | 生产 `/captcha` | `siteKey=""`，`mode=bypass` |
 | 生产 SMS/hCaptcha env | 腾讯云 SMS / hCaptcha **均未配置**；`CAPTCHA_DEV_BYPASS=1` |
@@ -162,8 +162,8 @@
 
 | ID | 差距点 | 数字/事实 |
 |----|--------|-----------|
-| Q-GAP-01 | 测试面极窄 | **28** 个 XCTest，全是 Publish/OrderPolicy/DTO；无 APIClient、FeatureModel、UI、Socket |
-| Q-GAP-02 | 无 CI workflow | 仓库无 `.github`；仅有 `scripts/test-with-xcode.sh` |
+| Q-GAP-01 | 测试面仍窄 | **72** 个 XCTest，已覆盖 Publish/OrderPolicy/DTO/APIClient/APIConfig/AuthSession/InboxState、实时载荷、multipart 安全及主列表 Feature Model（含消息竞态）；仍无 UI 和真实 Socket E4 |
+| Q-GAP-02 | CI 尚待线上验证 | 已增加 `.github/workflows/ci.yml`，运行 `swift test` 与 macOS arm64 Debug 构建 |
 | Q-GAP-03 | Feature Model 覆盖不均 | Orders/Discover/Messages 有；Wallet/Circles/Agent/Welfare 仍偏 View→Service |
 | Q-GAP-04 | 生产无 Sentry | `.env` 无 `SENTRY_DSN` | 线上错误不可观测 |
 | Q-GAP-05 | OpenAPI 不可消费 | `/api-docs` 返回前端 HTML | 契约发现困难 |
@@ -179,7 +179,7 @@
 | §2.17 发布/订单行「无测试钱包 E4」 | 否认 E4 | curl E4 已跑通 |
 | §2.18 K-01/K-02「待 E4」 | 待办 | E4 已部分覆盖 |
 | §3「账号｜注册…无」 | 无注册 | `RegisterView` + 生产 register fallback 已存在 |
-| §6「22 tests」 | 旧数 | 现 **28** |
+| §6「22 tests」 | 旧数 | 现 **72** |
 | O-11「缺失时 minPrice 列表回退」 | 旧 mapper | 已改为缺字段展示「—」/不驱动付款 |
 
 ---
@@ -192,7 +192,7 @@
 |----------|------|------|
 | 黄金路径 + 争议 E4 成功且有钱包证据 | **满足（API）** | 批次 e4-1784283980 |
 | 客户端付款/列表不以本地费率或 minPrice 驱动资金决策 | **满足** | PaymentGate + mapper |
-| 领域/契约测试覆盖资金 DTO 与动作门控；固定 Xcode 下绿 | **满足** | 28 tests + test-with-xcode.sh |
+| 领域/契约测试覆盖资金 DTO 与动作门控；固定 Xcode 下绿 | **满足** | 72 tests + test-with-xcode.sh（严格并发构建） |
 | Inventory §8 P0 与 BR-001/002 关闭或降级充值残留 | **部分满足** | BR 已关；inventory 文首/§2.17 **未全面同步** |
 
 ---
@@ -255,7 +255,7 @@ dead pool: 0 | service-cards: [] | welfare items: 0
 protected routes: 401
 buildMoneySummary: present in settlement/demand/order services
 accept-bid: deprecated message on order router
-swift test: 28 passed
+swift test: 72 passed
 E4 batch: e4-1784283980 A/B/C pass (API smoke)
 ```
 

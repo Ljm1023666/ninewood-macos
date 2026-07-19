@@ -14,6 +14,7 @@ struct CardPoolView: View {
     @State private var sortOrder = "默认排序"
     @State private var currentPage = 1
     @State private var snatchCredits: Int?
+    @State private var certifiedOnly = false
     private let previewDemands: [Demand]?
 
     init(previewDemands: [Demand]? = nil, initialTab: PoolTab = .active) {
@@ -230,14 +231,28 @@ struct CardPoolView: View {
             menuPicker(selection: $serviceMode, options: ["服务模式", "一对一", "一对多"])
             menuPicker(selection: $sortOrder, options: ["默认排序", "预算最高", "即将截止"])
 
-            Button { } label: {
+            Menu {
+                Toggle("仅认证服务者需求", isOn: $certifiedOnly)
+                Divider()
+                Button("重置筛选") {
+                    category = "全部类目"
+                    serviceMode = "服务模式"
+                    sortOrder = "默认排序"
+                    certifiedOnly = false
+                    searchText = ""
+                }
+            } label: {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AppTheme.secondaryLabel)
+                    .foregroundStyle(
+                        certifiedOnly || category != "全部类目" || serviceMode != "服务模式" || sortOrder != "默认排序"
+                            ? AppTheme.primary
+                            : AppTheme.secondaryLabel
+                    )
                     .frame(width: 30, height: 30)
                     .background(AppTheme.fill.opacity(0.55), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .buttonStyle(.plain)
+            .menuStyle(.borderlessButton)
             .help("更多筛选")
         }
         .padding(.horizontal, 16)
@@ -416,7 +431,8 @@ struct CardPoolView: View {
                 || demand.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
             let matchesCategory = category == "全部类目" || demand.tags.contains(category)
             let matchesMode = serviceMode == "服务模式" || serviceModeText(demand) == serviceMode
-            return matchesQuery && matchesCategory && matchesMode
+            let matchesCert = !certifiedOnly || demand.isCertifiedOnly
+            return matchesQuery && matchesCategory && matchesMode && matchesCert
         }
         switch sortOrder {
         case "预算最高":

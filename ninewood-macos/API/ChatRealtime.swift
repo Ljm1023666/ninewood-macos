@@ -2,20 +2,10 @@ import Foundation
 import Observation
 @preconcurrency import SocketIO
 
-struct RealtimeIncomingMessage: Equatable, Identifiable {
-    let id: String
-    let fromUserId: String
-    let toUserId: String
-    let content: String
-    let createdAt: Date
-    let hasCardAttachment: Bool
-    let mergeId: String?
-}
-
 /// Socket.IO 实时通道（对齐 Windows `utils/socket.ts`）
 @Observable
 @MainActor
-final class ChatRealtime {
+final class ChatRealtime: RealtimeSessionConnecting {
     private(set) var isConnected = false
     private(set) var lastIncoming: RealtimeIncomingMessage?
     /// 递增序号，便于视图 onChange 触发刷新

@@ -177,26 +177,50 @@ final class CaptchaService {
     }
 
     func siteKey() async throws -> String {
-        let dto: CaptchaSiteKeyDTO = try await client.get("/captcha")
+        let dto = try await status()
         return dto.siteKey ?? ""
     }
 
+    /// `/captcha` 返回裸 JSON（非 `APIEnvelope`），须走 raw 解码。
     func status() async throws -> CaptchaSiteKeyDTO {
-        try await client.get("/captcha")
+        try await client.getRaw("/captcha")
     }
 
-    /// 取得可用于 `/auth/send-code` 的 captchaToken。
-    /// 当前生产未配置 hCaptcha 时走 bypass；配置后需接入原生人机验证。
-    func obtainSendCodeToken() async throws -> String {
+    /// 开发环境取得 bypass token；正式 hCaptcha 模式必须由 UI 完成挑战。
+    func bypassTokenIfAvailable() async throws -> String? {
         let status = try await status()
         let siteKey = status.siteKey ?? ""
         if siteKey.isEmpty || status.mode == "bypass" {
             return Self.unconfiguredBypassToken
         }
+        return nil
+    }
+
+    /// 将 hCaptcha 浏览器 token 交给 Ninewood 服务端验证，返回一次性发码 token。
+    func verifyChallengeToken(_ token: String) async throws -> String {
+        struct Body: Encodable { let token: String }
+        let result: CaptchaVerifyDTO = try await client.postRaw(
+            "/captcha/verify",
+            body: Body(token: token)
+        )
+        guard result.success, !result.token.isEmpty else {
+            throw APIError.server(
+                statusCode: 400,
+                errorCode: "CAPTCHA_FAILED",
+                message: result.message ?? "人机验证失败，请重试",
+                requestID: nil
+            )
+        }
+        return result.token
+    }
+
+    /// 兼容仅开发 bypass 的旧调用点；正式模式要求 UI 提供挑战 token。
+    func obtainSendCodeToken() async throws -> String {
+        if let token = try await bypassTokenIfAvailable() { return token }
         throw APIError.server(
-            statusCode: 400,
-            errorCode: nil,
-            message: "当前客户端尚未接入图形验证码，请稍后再试或联系管理员配置",
+            statusCode: 428,
+            errorCode: "CAPTCHA_REQUIRED",
+            message: "请先完成人机验证",
             requestID: nil
         )
     }

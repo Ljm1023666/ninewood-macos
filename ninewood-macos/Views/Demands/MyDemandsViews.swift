@@ -14,6 +14,7 @@ struct MyDemandsView: View {
     @State private var bidsError: String?
     @State private var demandToDelete: Demand?
     @State private var statusFilter: DemandStatusFilter = .all
+    @State private var showDrafts = false
     private let previewDemands: [Demand]?
     private let previewApplicants: [DemandApplicant]
 
@@ -131,7 +132,17 @@ struct MyDemandsView: View {
         }
         .navigationTitle("我的需求")
         .task { await load() }
-        .toolbar { Button("刷新") { Task { await load() } } }
+        .toolbar {
+            if previewDemands == nil {
+                Button("草稿箱") { showDrafts = true }
+            }
+            Button("刷新") { Task { await load() } }
+        }
+        .sheet(isPresented: $showDrafts) {
+            DemandDraftsSheet()
+                .environment(session)
+                .frame(minWidth: 520, minHeight: 420)
+        }
         .alert("提示", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
             Button("确定", role: .cancel) {}
         } message: { Text(message ?? "") }
@@ -822,5 +833,88 @@ private struct MyBidsDesignReferenceDetail: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+private struct DemandDraftsSheet: View {
+    @Environment(AppSession.self) private var session
+    @Environment(\.dismiss) private var dismiss
+    @State private var drafts: [Demand] = []
+    @State private var isLoading = false
+    @State private var busyID: String?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if isLoading && drafts.isEmpty {
+                    ProgressView("加载草稿…")
+                } else if let errorMessage, drafts.isEmpty {
+                    NWEmptyState(title: "草稿加载失败", systemImage: "wifi.exclamationmark", message: errorMessage)
+                } else if drafts.isEmpty {
+                    NWEmptyState(title: "暂无云端草稿", systemImage: "doc", message: "在「发布」页点击保存草稿后会出现在这里")
+                } else {
+                    List(drafts) { draft in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(draft.title)
+                                Text(draft.minPrice.currencyText)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button {
+                                Task { await publish(draft.id) }
+                            } label: {
+                                if busyID == draft.id {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Text("发布")
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(busyID != nil)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("草稿箱")
+            .toolbar {
+                Button("关闭") { dismiss() }
+                Button("刷新") { Task { await load() } }
+            }
+            .task { await load() }
+            .alert("草稿", isPresented: Binding(
+                get: { errorMessage != nil && !drafts.isEmpty },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("确定", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
+        }
+    }
+
+    private func load() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            drafts = try await session.demandRepository.listDrafts()
+            errorMessage = nil
+        } catch {
+            drafts = []
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func publish(_ id: String) async {
+        busyID = id
+        defer { busyID = nil }
+        do {
+            _ = try await session.demandRepository.publishDraft(id: id)
+            await load()
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
     }
 }

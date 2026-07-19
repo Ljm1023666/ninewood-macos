@@ -2,7 +2,7 @@ import Foundation
 
 /// 订单领域的数据与命令入口。
 @MainActor
-final class OrderRepository {
+final class OrderRepository: OrderListing {
     private let service: OrderService
 
     init(service: OrderService) {

@@ -355,6 +355,11 @@ private struct MessagesReferencePreview: View {
     @State private var chatModel: ChatDetailFeatureModel?
     @State private var isExtendingCommunication = false
     @State private var showCardPicker = false
+    @State private var dmPhotoItem: PhotosPickerItem?
+    @State private var openedDemandID: String?
+    @State private var openedServiceCardID: String?
+    @State private var cardOpenError: String?
+    @State private var showSafetyGuide = false
 
     private let rows: [(String, String, String, Int, String?, Bool)] = [
         ("林夏", "好的，我看看这个需求卡，稍后给你反馈。", "14:32", 2, "AvatarLinXia", true),
@@ -407,6 +412,74 @@ private struct MessagesReferencePreview: View {
             }
             .environment(session)
             .frame(minWidth: 520, minHeight: 460)
+        }
+        .sheet(item: Binding(
+            get: { openedDemandID.map(IdentifiableString.init) },
+            set: { openedDemandID = $0?.value }
+        )) { item in
+            NavigationStack {
+                DemandDetailLoaderView(demandID: item.value)
+            }
+            .environment(session)
+            .frame(minWidth: 720, minHeight: 640)
+        }
+        .sheet(item: Binding(
+            get: { openedServiceCardID.map(IdentifiableString.init) },
+            set: { openedServiceCardID = $0?.value }
+        )) { item in
+            NavigationStack {
+                ServiceCardLoaderView(cardID: item.value)
+            }
+            .environment(session)
+            .frame(minWidth: 560, minHeight: 480)
+        }
+        .alert("无法打开卡片", isPresented: Binding(
+            get: { cardOpenError != nil },
+            set: { if !$0 { cardOpenError = nil } }
+        )) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(cardOpenError ?? "")
+        }
+        .onChange(of: dmPhotoItem) { _, item in
+            guard let item else { return }
+            Task {
+                await sendDirectPhoto(item)
+                dmPhotoItem = nil
+            }
+        }
+    }
+
+    private func sendDirectPhoto(_ item: PhotosPickerItem) async {
+        guard let chatModel else { return }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                chatModel.errorMessage = "无法读取所选图片"
+                return
+            }
+            await chatModel.sendImage(
+                data: data,
+                fileName: "dm_\(Int(Date().timeIntervalSince1970)).jpg",
+                mimeType: "image/jpeg"
+            )
+        } catch {
+            chatModel.errorMessage = (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+        }
+    }
+
+    private func openLiveCard(_ attachment: ChatCardAttachment) {
+        guard let cardID = attachment.cardID, !cardID.isEmpty else {
+            cardOpenError = "卡片缺少业务对象 ID"
+            return
+        }
+        switch attachment.kind {
+        case .demand:
+            openedDemandID = cardID
+        case .serviceCard:
+            openedServiceCardID = cardID
+        case .unknown:
+            cardOpenError = "暂不支持打开此类卡片"
         }
     }
 
@@ -526,17 +599,46 @@ private struct MessagesReferencePreview: View {
         case .time(let text):
             timeChip(text)
         case .text(let text, let isMine, _):
-            if isMine {
+            if isMediaMessagePath(text) {
+                liveMediaBubble(path: text, isMine: isMine, peer: peer)
+            } else if isMine {
                 outgoing(text, "")
             } else {
                 incoming(text, asset: nil, name: peer.name, avatarURL: peer.avatarMediaURL)
             }
         case .card(let attachment, _):
-            if attachment.isMine {
-                outgoing(attachment.title, "")
-            } else {
-                incoming(attachment.summary ?? attachment.title, asset: nil, name: peer.name, avatarURL: peer.avatarMediaURL)
+            HStack {
+                if attachment.isMine { Spacer(minLength: 48) }
+                Button {
+                    openLiveCard(attachment)
+                } label: {
+                    ChatCardAttachmentChip(attachment: attachment)
+                }
+                .buttonStyle(.plain)
+                if !attachment.isMine { Spacer(minLength: 48) }
             }
+        }
+    }
+
+    private func isMediaMessagePath(_ text: String) -> Bool {
+        text.hasPrefix("/uploads/") || text.contains("/uploads/")
+    }
+
+    @ViewBuilder
+    private func liveMediaBubble(path: String, isMine: Bool, peer: AppUser) -> some View {
+        HStack {
+            if isMine { Spacer(minLength: 48) }
+            VStack(alignment: isMine ? .trailing : .leading, spacing: 6) {
+                if !isMine {
+                    Text(peer.name)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                NWRemoteImage(url: APIConfig.mediaURL(path), cornerRadius: 10)
+                    .frame(width: 200, height: 140)
+                    .clipped()
+            }
+            if !isMine { Spacer(minLength: 48) }
         }
     }
 
@@ -554,6 +656,18 @@ private struct MessagesReferencePreview: View {
                 }
                 .buttonStyle(.plain)
                 .help("发送我的需求卡或服务卡")
+                .disabled(!chatModel.canAttachMedia)
+
+                PhotosPicker(selection: $dmPhotoItem, matching: .images) {
+                    Image(systemName: "photo")
+                        .font(.body.weight(.semibold))
+                        .frame(width: 28, height: 28)
+                        .background(AppTheme.surfaceLow, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help("发送图片")
+                .disabled(!chatModel.canAttachMedia)
+
                 Spacer()
             }
             HStack(alignment: .bottom, spacing: 10) {
@@ -982,17 +1096,48 @@ private struct MessagesReferencePreview: View {
                 }
 
                 Divider()
-                HStack {
-                    Text("查看《安全沟通指南》")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.primary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.primary)
+                Button {
+                    showSafetyGuide = true
+                } label: {
+                    HStack {
+                        Text("查看《安全沟通指南》")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppTheme.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.primary)
+                    }
                 }
+                .buttonStyle(.plain)
             }
             .padding(16)
+        }
+        .sheet(isPresented: $showSafetyGuide) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("安全沟通指南")
+                            .font(.title2.bold())
+                        Text("请在九木平台内完成沟通与交易。平台托管与沟通记录用于保护双方权益。")
+                            .foregroundStyle(.secondary)
+                        Text("需求未确认前，不要交换个人联系方式或进行站外转账。")
+                            .foregroundStyle(.secondary)
+                        Text("警惕虚假需求、诱导私下付款或索要敏感信息；发现问题请使用举报入口。")
+                            .foregroundStyle(.secondary)
+                        Text("更多说明见侧栏「帮助」→「沟通与社区」。")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(24)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("关闭") { showSafetyGuide = false }
+                    }
+                }
+            }
+            .frame(minWidth: 420, minHeight: 320)
         }
     }
 
@@ -1227,6 +1372,8 @@ private struct GroupMessagesReferencePreview: View {
     @State private var searchText = ""
     @State private var muteNotifications = false
     @State private var infoTab = 0
+    @State private var showChatSearch = false
+    @State private var chatSearchText = ""
     @State private var liveBubbles: [ChatBubbleKind] = []
     @State private var isLoadingLive = false
     @State private var isSendingLive = false
@@ -1309,10 +1456,32 @@ private struct GroupMessagesReferencePreview: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
-                HStack(spacing: 14) {
-                    Image(systemName: "magnifyingglass")
-                    Image(systemName: "list.bullet")
-                    Image(systemName: "ellipsis")
+                HStack(spacing: 4) {
+                    Button {
+                        withAnimation { showChatSearch.toggle() }
+                        if !showChatSearch { chatSearchText = "" }
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .help("搜索本群消息")
+                    Button {
+                        infoTab = 0
+                    } label: {
+                        Image(systemName: "list.bullet")
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .help("群信息")
+                    Button {
+                        infoTab = 1
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .help("群设置")
                 }
                 .font(.body)
                 .foregroundStyle(.secondary)
@@ -1323,13 +1492,31 @@ private struct GroupMessagesReferencePreview: View {
             .background(AppTheme.surface)
             Divider()
 
+            if showChatSearch {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("搜索本群消息", text: $chatSearchText)
+                        .textFieldStyle(.plain)
+                    if !chatSearchText.isEmpty {
+                        Button("清除") { chatSearchText = "" }
+                            .buttonStyle(.plain)
+                            .font(.caption)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(AppTheme.surfaceLow)
+                Divider()
+            }
+
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         if isLoadingLive && liveBubbles.isEmpty {
                             ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
                         }
-                        ForEach(Array(liveBubbles.enumerated()), id: \.offset) { index, bubble in
+                        ForEach(Array(filteredLiveBubbles.enumerated()), id: \.offset) { index, bubble in
                             liveGroupBubble(bubble).id(index)
                         }
                     }
@@ -1431,36 +1618,13 @@ private struct GroupMessagesReferencePreview: View {
     }
 
     private func liveAttachmentCard(_ attachment: ChatCardAttachment) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: attachment.kind == .demand ? "doc.text.fill" : "rectangle.stack.fill")
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(attachment.title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(2)
-                if let summary = attachment.summary, !summary.isEmpty, summary != attachment.title {
-                    Text(summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
-            Spacer(minLength: 4)
-        }
-        .padding(10)
-        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(AppTheme.outlineVariant, lineWidth: 1)
-        }
+        ChatCardAttachmentChip(attachment: attachment)
     }
 
     private var liveGroupComposer: some View {
         HStack(spacing: 8) {
             PhotosPicker(selection: $mergePhotoItem, matching: .images) {
-                Image(systemName: "plus")
+                Image(systemName: "photo")
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary)
                     .frame(width: 34, height: 34)
@@ -1472,22 +1636,7 @@ private struct GroupMessagesReferencePreview: View {
             }
             .buttonStyle(.plain)
             .disabled(isSendingLive || isSendingMergeFile || selectedMerge == nil)
-            .help("发送图片附件")
-
-            PhotosPicker(selection: $mergePhotoItem, matching: .images) {
-                Image(systemName: "doc.text")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 34, height: 34)
-                    .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(AppTheme.outlineVariant, lineWidth: 1)
-                    }
-            }
-            .buttonStyle(.plain)
-            .disabled(isSendingLive || isSendingMergeFile || selectedMerge == nil)
-            .help("发送图片附件")
+            .help("发送图片")
 
             TextField("输入消息…", text: $draft)
                 .textFieldStyle(.plain)
@@ -1584,7 +1733,7 @@ private struct GroupMessagesReferencePreview: View {
                 inboxMode: $inboxMode,
                 searchText: $searchText,
                 searchPlaceholder: "搜索群聊",
-                showsFilterIcon: true
+                showsFilterIcon: false
             ) {
                 HStack(spacing: 8) {
                     Button(action: onShowNotifications) {
@@ -1983,174 +2132,207 @@ private struct GroupMessagesReferencePreview: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if useStaticFixtures {
-                        Text("成员 (6)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        VStack(spacing: 10) {
-                            ForEach(members, id: \.0) { member in
-                                HStack(spacing: 10) {
-                                    Image(member.3)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 32, height: 32)
-                                        .clipShape(Circle())
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        HStack(spacing: 6) {
-                                            Text(member.0)
-                                                .font(.subheadline.weight(.semibold))
-                                            if let role = member.2 {
-                                                Text(role)
-                                                    .font(.caption2.bold())
-                                                    .foregroundStyle(AppTheme.primary)
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 2)
-                                                    .background(AppTheme.softPrimary, in: Capsule())
-                                            }
-                                        }
-                                        Text(member.1)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer(minLength: 0)
-                                }
-                            }
-                        }
+                    if infoTab == 0 {
+                        groupInfoTabContent
                     } else {
-                        let liveMembers = selectedMerge?.members ?? []
-                        Text("成员 (\(liveMembers.count))")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        if liveMembers.isEmpty {
-                            Text("暂无成员信息")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            VStack(spacing: 10) {
-                                ForEach(liveMembers, id: \.userId) { member in
-                                    HStack(spacing: 10) {
-                                        NWAvatarView(
-                                            url: nil,
-                                            name: memberDisplayName(member),
-                                            size: 32
-                                        )
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(memberDisplayName(member))
-                                                .font(.subheadline.weight(.semibold))
-                                            Text(member.userId)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
-                                        Spacer(minLength: 0)
-                                    }
-                                }
-                            }
-                        }
+                        groupSettingsTabContent
                     }
-
-                    Divider()
-                    if useStaticFixtures {
-                        Text("关联需求")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 10) {
-                            Image(systemName: "doc.text.fill")
-                                .foregroundStyle(.white)
-                                .frame(width: 32, height: 32)
-                                .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("用户画像与核心场景梳理")
-                                    .font(.subheadline.weight(.semibold))
-                                    .lineLimit(2)
-                                Text("REQ-2024-1027")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 0)
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(10)
-                        .ninewoodCard()
-                    }
-
-                    Text(useStaticFixtures ? "共享文件 (3)" : "共享文件 (\(displaySharedFiles.count))")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    VStack(spacing: 10) {
-                        ForEach(displaySharedFiles, id: \.0) { file in
-                            HStack(spacing: 10) {
-                                Image(systemName: "doc.fill")
-                                    .foregroundStyle(.white)
-                                    .frame(width: 28, height: 28)
-                                    .background(file.2, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(file.0)
-                                        .font(.caption.weight(.semibold))
-                                        .lineLimit(1)
-                                    Text(file.1)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer(minLength: 0)
-                            }
-                        }
-                    }
-                    if !useStaticFixtures, let merge = selectedMerge {
-                        Button {
-                            showAddMembers = true
-                        } label: {
-                            Label("添加成员", systemImage: "person.badge.plus")
-                                .font(.subheadline.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                        }
-                        .buttonStyle(.bordered)
-                        .sheet(isPresented: $showAddMembers) {
-                            AddMergeMembersSheet(mergeId: merge.id) { updated in
-                                if let idx = merges.firstIndex(where: { $0.id == updated.id }) {
-                                    merges[idx] = updated
-                                }
-                                selectedMerge = updated
-                            }
-                            .frame(minWidth: 420, minHeight: 360)
-                        }
-                    }
-
-                    Divider()
-                    Toggle("消息免打扰", isOn: $muteNotifications)
-                        .font(.subheadline)
-                        .disabled(useStaticFixtures || selectedMerge == nil)
-                        .onChange(of: muteNotifications) { _, muted in
-                            guard !useStaticFixtures, let merge = selectedMerge else { return }
-                            Task { await setMute(mergeId: merge.id, muted: muted) }
-                        }
-                    Button {
-                        guard !useStaticFixtures, let merge = selectedMerge else { return }
-                        Task { await leaveGroup(mergeId: merge.id) }
-                    } label: {
-                        Text("退出群聊")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(AppTheme.error)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(
-                                Color.white,
-                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            )
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(AppTheme.outlineVariant, lineWidth: 1)
-                            }
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(useStaticFixtures || selectedMerge == nil)
-                    .padding(.top, 4)
                 }
                 .padding(16)
             }
+        }
+        .onChange(of: selectedMerge?.id) { _, _ in
+            syncMuteFromSelectedMerge()
+        }
+        .onAppear { syncMuteFromSelectedMerge() }
+    }
+
+    @ViewBuilder
+    private var groupInfoTabContent: some View {
+        if useStaticFixtures {
+            Text("成员 (6)")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            VStack(spacing: 10) {
+                ForEach(members, id: \.0) { member in
+                    HStack(spacing: 10) {
+                        Image(member.3)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 32, height: 32)
+                            .clipShape(Circle())
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(member.0)
+                                    .font(.subheadline.weight(.semibold))
+                                if let role = member.2 {
+                                    Text(role)
+                                        .font(.caption2.bold())
+                                        .foregroundStyle(AppTheme.primary)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(AppTheme.softPrimary, in: Capsule())
+                                }
+                            }
+                            Text(member.1)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        } else {
+            let liveMembers = selectedMerge?.members ?? []
+            Text("成员 (\(liveMembers.count))")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            if liveMembers.isEmpty {
+                Text("暂无成员信息")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(liveMembers, id: \.userId) { member in
+                        HStack(spacing: 10) {
+                            NWAvatarView(
+                                url: member.avatarMediaURL,
+                                name: member.displayName,
+                                size: 32
+                            )
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(member.displayName)
+                                    .font(.subheadline.weight(.semibold))
+                                Text(member.userId)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+            }
+        }
+
+        Divider()
+        if useStaticFixtures {
+            Text("关联需求")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Image(systemName: "doc.text.fill")
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("用户画像与核心场景梳理")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(2)
+                    Text("REQ-2024-1027")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(10)
+            .ninewoodCard()
+        }
+
+        Text(useStaticFixtures ? "共享文件 (3)" : "共享文件 (\(displaySharedFiles.count))")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+        if displaySharedFiles.isEmpty {
+            Text("暂无共享文件")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            VStack(spacing: 10) {
+                ForEach(displaySharedFiles, id: \.0) { file in
+                    HStack(spacing: 10) {
+                        Image(systemName: "doc.fill")
+                            .foregroundStyle(.white)
+                            .frame(width: 28, height: 28)
+                            .background(file.2, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(file.0)
+                                .font(.caption.weight(.semibold))
+                                .lineLimit(1)
+                            Text(file.1)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        }
+        if !useStaticFixtures, let merge = selectedMerge {
+            Button {
+                showAddMembers = true
+            } label: {
+                Label("添加成员", systemImage: "person.badge.plus")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.bordered)
+            .sheet(isPresented: $showAddMembers) {
+                AddMergeMembersSheet(mergeId: merge.id) { updated in
+                    if let idx = merges.firstIndex(where: { $0.id == updated.id }) {
+                        merges[idx] = updated
+                    }
+                    selectedMerge = updated
+                }
+                .frame(minWidth: 420, minHeight: 360)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var groupSettingsTabContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("通知")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Toggle("消息免打扰", isOn: $muteNotifications)
+                .font(.subheadline)
+                .disabled(useStaticFixtures || selectedMerge == nil)
+                .onChange(of: muteNotifications) { _, muted in
+                    guard !useStaticFixtures, let merge = selectedMerge else { return }
+                    Task { await setMute(mergeId: merge.id, muted: muted) }
+                }
+        }
+
+        Divider()
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text("群聊")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Button {
+                guard !useStaticFixtures, let merge = selectedMerge else { return }
+                Task { await leaveGroup(mergeId: merge.id) }
+            } label: {
+                Text("退出群聊")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.error)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        Color.white,
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(AppTheme.outlineVariant, lineWidth: 1)
+                    }
+            }
+            .buttonStyle(.plain)
+            .disabled(useStaticFixtures || selectedMerge == nil)
         }
     }
 
@@ -2158,10 +2340,35 @@ private struct GroupMessagesReferencePreview: View {
         useStaticFixtures ? sharedFiles : liveSharedFiles
     }
 
+    private var filteredLiveBubbles: [ChatBubbleKind] {
+        let q = chatSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return liveBubbles }
+        return liveBubbles.filter { bubble in
+            switch bubble {
+            case .system(let text), .time(let text):
+                return text.localizedCaseInsensitiveContains(q)
+            case .text(let text, _, _):
+                return text.localizedCaseInsensitiveContains(q)
+            case .card(let card, _):
+                return card.title.localizedCaseInsensitiveContains(q)
+                    || (card.summary?.localizedCaseInsensitiveContains(q) ?? false)
+            }
+        }
+    }
+
+    private func syncMuteFromSelectedMerge() {
+        guard !useStaticFixtures,
+              let myId = session.currentUserId ?? session.currentUser?.id,
+              let member = selectedMerge?.members?.first(where: { $0.userId == myId })
+        else {
+            muteNotifications = false
+            return
+        }
+        muteNotifications = member.mutedAt != nil
+    }
+
     private func memberDisplayName(_ member: MergeChatMemberDTO) -> String {
-        let id = member.userId
-        if id.count <= 8 { return id }
-        return String(id.prefix(8))
+        member.displayName
     }
 
     private func setMute(mergeId: String, muted: Bool) async {
@@ -2239,7 +2446,7 @@ private struct GroupMessagesReferencePreview: View {
     @ViewBuilder
     private func liveCollageCell(_ member: MergeChatMemberDTO?, size: CGFloat) -> some View {
         if let member {
-            NWAvatarView(url: nil, name: memberDisplayName(member), size: size)
+            NWAvatarView(url: member.avatarMediaURL, name: member.displayName, size: size)
                 .clipShape(Rectangle())
         } else {
             AppTheme.surfaceLow
@@ -2332,6 +2539,7 @@ struct ChatDetailView: View {
     @State private var openedDemandID: String?
     @State private var openedServiceCardID: String?
     @State private var cardOpenError: String?
+    @State private var dmPhotoItem: PhotosPickerItem?
 
     init(
         thread: ChatThread,
@@ -2412,6 +2620,15 @@ struct ChatDetailView: View {
                 }
                 .buttonStyle(.bordered)
                 .help("发送我的需求卡或服务卡")
+                .disabled(!model.canAttachMedia)
+
+                PhotosPicker(selection: $dmPhotoItem, matching: .images) {
+                    Image(systemName: "photo")
+                }
+                .buttonStyle(.bordered)
+                .help("发送图片")
+                .disabled(!model.canAttachMedia)
+
                 TextField("发送消息…", text: $model.draft)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { Task { await model.send() } }
@@ -2434,6 +2651,13 @@ struct ChatDetailView: View {
             onOpened?()
             await model.load()
             await session.refreshUnread()
+        }
+        .onChange(of: dmPhotoItem) { _, item in
+            guard let item else { return }
+            Task {
+                await sendDirectPhoto(item)
+                dmPhotoItem = nil
+            }
         }
         .onChange(of: session.chatRealtime.lastIncoming) { _, incoming in
             guard let incoming else { return }
@@ -2503,15 +2727,25 @@ struct ChatDetailView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
         case .text(let text, let isMine, _):
-            HStack {
-                if isMine { Spacer(minLength: 80) }
-                Text(text)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .foregroundStyle(isMine ? .white : AppTheme.onSurface)
-                    .background(isMine ? AppTheme.primary : AppTheme.bubbleIncoming)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                if !isMine { Spacer(minLength: 80) }
+            if text.hasPrefix("/uploads/") || text.contains("/uploads/") {
+                HStack {
+                    if isMine { Spacer(minLength: 80) }
+                    NWRemoteImage(url: APIConfig.mediaURL(text), cornerRadius: 10)
+                        .frame(width: 200, height: 140)
+                        .clipped()
+                    if !isMine { Spacer(minLength: 80) }
+                }
+            } else {
+                HStack {
+                    if isMine { Spacer(minLength: 80) }
+                    Text(text)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .foregroundStyle(isMine ? .white : AppTheme.onSurface)
+                        .background(isMine ? AppTheme.primary : AppTheme.bubbleIncoming)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    if !isMine { Spacer(minLength: 80) }
+                }
             }
         case .card(let card, _):
             HStack {
@@ -2598,6 +2832,23 @@ struct ChatDetailView: View {
             model.updateCommunication(
                 deadline: APIDate.parse(updated.commDeadline),
                 addedMinutes: 5
+            )
+        } catch {
+            model.errorMessage = (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+        }
+    }
+
+    private func sendDirectPhoto(_ item: PhotosPickerItem) async {
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                model.errorMessage = "无法读取所选图片"
+                return
+            }
+            await model.sendImage(
+                data: data,
+                fileName: "dm_\(Int(Date().timeIntervalSince1970)).jpg",
+                mimeType: "image/jpeg"
             )
         } catch {
             model.errorMessage = (error as? LocalizedError)?.errorDescription
@@ -2778,10 +3029,47 @@ private struct MessageCardPicker: View {
         do {
             async let demandTask = session.demandRepository.mine()
             async let cardTask = session.serviceCardService.mine()
-            (demands, serviceCards) = try await (demandTask, cardTask)
+            let (allDemands, allCards) = try await (demandTask, cardTask)
+            // 服务端需求卡要求本人公开需求；草稿/冻结不可发。
+            demands = allDemands.filter { $0.status == .active }
+            serviceCards = allCards
+            if demands.isEmpty && serviceCards.isEmpty {
+                errorMessage = "暂无可发送卡片。请先发布公开需求，或创建并保存服务卡。"
+            }
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription
                 ?? error.localizedDescription
+        }
+    }
+}
+
+private struct ChatCardAttachmentChip: View {
+    let attachment: ChatCardAttachment
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: attachment.kind == .demand ? "doc.text.fill" : "rectangle.stack.fill")
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(attachment.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                if let summary = attachment.summary, !summary.isEmpty, summary != attachment.title {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 4)
+        }
+        .padding(10)
+        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(AppTheme.outlineVariant, lineWidth: 1)
         }
     }
 }

@@ -20,6 +20,14 @@ struct FavoritesView: View {
     @State private var liveCards: [ServiceCardDTO] = []
     @State private var isLoading = false
     @State private var loadError: String?
+    @State private var sortMode: SortMode = .recent
+
+    private enum SortMode: String, CaseIterable, Identifiable {
+        case recent = "最近收藏"
+        case title = "标题"
+        case publisher = "发布者"
+        var id: String { rawValue }
+    }
 
     private var usesFixtures: Bool { previewDemands != nil }
 
@@ -27,7 +35,7 @@ struct FavoritesView: View {
         self.previewDemands = previewDemands
         _selectedID = State(
             initialValue: previewDemands != nil
-                ? FavoritesDesignFixtures.items.first!.id
+                ? (FavoritesDesignFixtures.items.first?.id ?? "")
                 : ""
         )
     }
@@ -47,22 +55,46 @@ struct FavoritesView: View {
 
     private var filteredDemands: [Demand] {
         let q = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return liveDemands }
-        return liveDemands.filter {
-            $0.title.localizedCaseInsensitiveContains(q)
-                || $0.publisher.name.localizedCaseInsensitiveContains(q)
-                || $0.tags.joined(separator: " ").localizedCaseInsensitiveContains(q)
+        var items = liveDemands
+        if !q.isEmpty {
+            items = items.filter {
+                $0.title.localizedCaseInsensitiveContains(q)
+                    || $0.publisher.name.localizedCaseInsensitiveContains(q)
+                    || $0.tags.joined(separator: " ").localizedCaseInsensitiveContains(q)
+            }
         }
+        switch sortMode {
+        case .recent:
+            break
+        case .title:
+            items.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        case .publisher:
+            items.sort { $0.publisher.name.localizedStandardCompare($1.publisher.name) == .orderedAscending }
+        }
+        return items
     }
 
     private var filteredCards: [ServiceCardDTO] {
         let q = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return liveCards }
-        return liveCards.filter {
-            $0.title.localizedCaseInsensitiveContains(q)
-                || ($0.publisher?.nickname ?? "").localizedCaseInsensitiveContains(q)
-                || ($0.tags ?? []).joined(separator: " ").localizedCaseInsensitiveContains(q)
+        var items = liveCards
+        if !q.isEmpty {
+            items = items.filter {
+                $0.title.localizedCaseInsensitiveContains(q)
+                    || ($0.publisher?.nickname ?? "").localizedCaseInsensitiveContains(q)
+                    || ($0.tags ?? []).joined(separator: " ").localizedCaseInsensitiveContains(q)
+            }
         }
+        switch sortMode {
+        case .recent:
+            break
+        case .title:
+            items.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        case .publisher:
+            items.sort {
+                ($0.publisher?.nickname ?? "").localizedStandardCompare($1.publisher?.nickname ?? "") == .orderedAscending
+            }
+        }
+        return items
     }
 
     private var selectedFixture: FavoritesDesignItem? {
@@ -221,7 +253,19 @@ struct FavoritesView: View {
             )
             .frame(width: 220)
 
-            Button {} label: {
+            Menu {
+                ForEach(SortMode.allCases) { mode in
+                    Button {
+                        sortMode = mode
+                    } label: {
+                        if sortMode == mode {
+                            Label(mode.rawValue, systemImage: "checkmark")
+                        } else {
+                            Text(mode.rawValue)
+                        }
+                    }
+                }
+            } label: {
                 Label("筛选", systemImage: "line.3.horizontal.decrease.circle")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AppTheme.secondaryLabel)
@@ -232,7 +276,8 @@ struct FavoritesView: View {
                             .strokeBorder(AppTheme.outlineVariant, lineWidth: 1)
                     )
             }
-            .buttonStyle(.plain)
+            .menuStyle(.borderlessButton)
+            .help("排序方式")
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)

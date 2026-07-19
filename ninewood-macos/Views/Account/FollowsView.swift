@@ -31,7 +31,7 @@ struct FollowsView: View {
         self.previewUsers = previewUsers
         _selectedID = State(
             initialValue: previewUsers != nil
-                ? FollowsDesignFixtures.following.first!.id
+                ? (FollowsDesignFixtures.following.first?.id ?? "")
                 : ""
         )
     }

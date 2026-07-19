@@ -1,6 +1,27 @@
 import Foundation
 import Observation
 
+@MainActor
+protocol AuthServicing {
+    func login(phone: String, password: String) async throws -> UserDTO
+    func register(
+        phone: String,
+        code: String,
+        password: String,
+        birthday: String,
+        guardianConsent: Bool?
+    ) async throws -> UserDTO
+    func fetchCurrentUser() async throws -> UserDTO
+    func logout() async
+}
+
+@MainActor
+protocol RealtimeSessionConnecting: AnyObject {
+    var onUnreadHint: (() -> Void)? { get set }
+    func connect(token: String?)
+    func disconnect()
+}
+
 enum SessionState: Equatable {
     case bootstrapping
     case signedOut
@@ -19,14 +40,14 @@ final class AuthSession {
     private(set) var backendStatusMessage = ""
 
     private let client: APIClient
-    private let auth: AuthService
-    private let realtime: ChatRealtime
+    private let auth: any AuthServicing
+    private let realtime: any RealtimeSessionConnecting
     private let inbox: InboxState
 
     init(
         client: APIClient,
-        auth: AuthService,
-        realtime: ChatRealtime,
+        auth: any AuthServicing,
+        realtime: any RealtimeSessionConnecting,
         inbox: InboxState
     ) {
         self.client = client

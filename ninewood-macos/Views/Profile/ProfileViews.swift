@@ -7,6 +7,8 @@ struct ProfileView: View {
     @State private var isBusy = false
     @State private var isUpdatingBusy = false
     @State private var walletSummary: WalletSummaryDTO?
+    @State private var inProgressOrderCount: Int?
+    @State private var loopRunCount: Int?
     private let previewOrders: [Order]?
     private let initialPath: String?
 
@@ -443,7 +445,9 @@ struct ProfileView: View {
         HStack(spacing: 0) {
             overviewMetric(
                 title: "进行中订单",
-                value: isDesignPreview ? "\(ProfileDesignPreviewFixtures.inProgressOrders)" : "—",
+                value: isDesignPreview
+                    ? "\(ProfileDesignPreviewFixtures.inProgressOrders)"
+                    : (inProgressOrderCount.map(String.init) ?? "…"),
                 caption: "查看订单",
                 systemImage: "bag",
                 tint: AppTheme.primary,
@@ -475,7 +479,9 @@ struct ProfileView: View {
             Divider().padding(.vertical, AppTheme.space16)
             overviewMetric(
                 title: "Natural Loop",
-                value: isDesignPreview ? "\(ProfileDesignPreviewFixtures.loopRuns) 次" : "—",
+                value: isDesignPreview
+                    ? "\(ProfileDesignPreviewFixtures.loopRuns) 次"
+                    : (loopRunCount.map { "\($0) 次" } ?? "…"),
                 caption: "查看记录",
                 systemImage: "arrow.triangle.2.circlepath",
                 tint: AppTheme.openStatus,
@@ -693,11 +699,21 @@ struct ProfileView: View {
     private func loadOverview() async {
         async let busyResult = try? session.userService.busyStatus()
         async let walletResult = try? session.walletService.summary()
-        let (busy, wallet) = await (busyResult, walletResult)
+        async let ordersResult = try? session.orderService.list(page: 1)
+        async let loopsResult = try? session.loopService.myRuns(limit: 1)
+        let (busy, wallet, orders, loops) = await (busyResult, walletResult, ordersResult, loopsResult)
         if let busy {
             isBusy = busy.isBusy == true
         }
         walletSummary = wallet
+        if let orders {
+            inProgressOrderCount = orders.filter {
+                $0.stage == .accepted || $0.stage == .inProgress || $0.stage == .waitingReview
+            }.count
+        }
+        if let loops {
+            loopRunCount = loops.summary?.total ?? loops.items.count
+        }
     }
 
     private func updateBusy(_ value: Bool) async {

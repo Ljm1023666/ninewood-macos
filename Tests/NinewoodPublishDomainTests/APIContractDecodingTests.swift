@@ -19,6 +19,24 @@ final class APIContractDecodingTests: XCTestCase {
         )
     }
 
+    func testCaptchaVerifyContract() throws {
+        let data = Data(
+            """
+            {
+              "success": true,
+              "token": "server-issued-captcha-token",
+              "message": "验证成功"
+            }
+            """.utf8
+        )
+
+        let result = try decoder.decode(CaptchaVerifyDTO.self, from: data)
+
+        XCTAssertTrue(result.success)
+        XCTAssertEqual(result.token, "server-issued-captcha-token")
+        XCTAssertEqual(result.message, "验证成功")
+    }
+
     func testDemandListContract() throws {
         let data = Data(
             """

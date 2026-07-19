@@ -470,27 +470,3 @@ struct DemandDetailSnapshot {
     let demand: Demand
     let applicants: [DemandApplicant]
 }
-
-enum APIDate {
-    static func parse(_ iso: String?) -> Date? {
-        guard let iso, !iso.isEmpty else { return nil }
-        let f1 = ISO8601DateFormatter()
-        f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = f1.date(from: iso) { return d }
-        let f2 = ISO8601DateFormatter()
-        f2.formatOptions = [.withInternetDateTime]
-        return f2.date(from: iso)
-    }
-
-    static func relativeOrTime(_ iso: String?) -> String {
-        guard let date = parse(iso) else { return "" }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        if Calendar.current.isDateInToday(date) {
-            formatter.dateFormat = "HH:mm"
-        } else {
-            formatter.dateFormat = "M/d"
-        }
-        return formatter.string(from: date)
-    }
-}

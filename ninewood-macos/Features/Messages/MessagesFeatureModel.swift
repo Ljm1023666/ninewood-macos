@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+@MainActor
+protocol ConversationListing {
+    func conversations() async throws -> [ChatThread]
+}
+
 @Observable
 @MainActor
 final class MessagesFeatureModel {
@@ -17,10 +22,22 @@ final class MessagesFeatureModel {
     private var openedPeerIDs: Set<String> = []
     private var loadGeneration = 0
 
-    private let repository: MessageRepository
+    private let repository: (any ConversationListing)?
     private let isPreview: Bool
 
-    init(repository: MessageRepository, previewThreads: [ChatThread]? = nil) {
+    init(repository: any ConversationListing) {
+        self.repository = repository
+        self.isPreview = false
+    }
+
+    init(previewThreads: [ChatThread]) {
+        self.repository = nil
+        self.isPreview = true
+        self.threads = previewThreads
+        self.selectedID = previewThreads.first?.id
+    }
+
+    init(repository: any ConversationListing, previewThreads: [ChatThread]?) {
         self.repository = repository
         self.isPreview = previewThreads != nil
         self.threads = previewThreads ?? []
@@ -61,6 +78,7 @@ final class MessagesFeatureModel {
 
     func load() async {
         guard !isPreview else { return }
+        guard let repository else { return }
         loadGeneration += 1
         let generation = loadGeneration
         isLoading = true

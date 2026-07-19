@@ -1,0 +1,31 @@
+name: macOS CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: macos-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+
+      - name: Test domain and API contracts
+        run: xcrun swift test
+
+      - name: Build macOS app
+        run: |
+          xcodebuild \
+            -project ninewood-macos.xcodeproj \
+            -scheme ninewood-macos \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            build CODE_SIGNING_ALLOWED=NO SWIFT_STRICT_CONCURRENCY=complete

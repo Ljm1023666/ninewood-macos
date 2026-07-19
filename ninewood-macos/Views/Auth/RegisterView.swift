@@ -21,7 +21,9 @@ struct RegisterView: View {
     @State private var countdown = 0
     @State private var fallbackCodeHint: String?
     @State private var errorMessage: String?
+    @State private var errorTitle = "注册失败"
     @State private var infoMessage: String?
+    @State private var captchaSiteKey: String?
 
     private let birthdayFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -126,7 +128,7 @@ struct RegisterView: View {
                 }
             }
         )
-        .alert("注册失败", isPresented: Binding(
+        .alert(errorTitle, isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
@@ -139,6 +141,21 @@ struct RegisterView: View {
             try? await Task.sleep(for: .seconds(1))
             if countdown > 0 { countdown -= 1 }
         }
+        .sheet(isPresented: Binding(
+            get: { captchaSiteKey != nil },
+            set: { if !$0 { captchaSiteKey = nil } }
+        )) {
+            if let captchaSiteKey {
+                HCaptchaChallengeView(
+                    siteKey: captchaSiteKey,
+                    onSolved: { token in
+                        self.captchaSiteKey = nil
+                        Task { await verifyAndSendCode(challengeToken: token) }
+                    },
+                    onCancel: { self.captchaSiteKey = nil }
+                )
+            }
+        }
     }
 
     private func sendCode() async {
@@ -147,20 +164,46 @@ struct RegisterView: View {
         infoMessage = nil
         fallbackCodeHint = nil
         do {
-            let result = try await session.sendRegistrationCode(phone: phone)
-            countdown = 60
-            let isFallback = result.delivery == "fallback"
-                || (result.code?.isEmpty == false)
-            if isFallback, let returned = result.code, !returned.isEmpty {
-                code = returned
-                fallbackCodeHint = returned
-                infoMessage = "开发通道已启用，验证码已自动填入"
+            let status = try await session.captchaService.status()
+            let siteKey = status.siteKey ?? ""
+            if status.mode == "bypass" || siteKey.isEmpty {
+                try await sendCodeRequest(captchaToken: CaptchaService.unconfiguredBypassToken)
             } else {
-                fallbackCodeHint = nil
-                infoMessage = "验证码已发送，请查收短信"
+                captchaSiteKey = siteKey
             }
         } catch {
+            errorTitle = "获取验证码失败"
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func verifyAndSendCode(challengeToken: String) async {
+        isSendingCode = true
+        defer { isSendingCode = false }
+        do {
+            let verifiedToken = try await session.captchaService.verifyChallengeToken(challengeToken)
+            try await sendCodeRequest(captchaToken: verifiedToken)
+        } catch {
+            errorTitle = "人机验证失败"
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func sendCodeRequest(captchaToken: String) async throws {
+        let result = try await session.sendRegistrationCode(
+            phone: phone,
+            captchaToken: captchaToken
+        )
+        countdown = 60
+        let isFallback = result.delivery == "fallback"
+            || (result.code?.isEmpty == false)
+        if isFallback, let returned = result.code, !returned.isEmpty {
+            code = returned
+            fallbackCodeHint = returned
+            infoMessage = "开发通道已启用，验证码已自动填入"
+        } else {
+            fallbackCodeHint = nil
+            infoMessage = "验证码已发送，请查收短信"
         }
     }
 
@@ -176,6 +219,7 @@ struct RegisterView: View {
                 guardianConsent: nil
             )
         } catch {
+            errorTitle = "注册失败"
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }

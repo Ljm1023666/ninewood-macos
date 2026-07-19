@@ -51,9 +51,12 @@ enum MessageMapperSupport {
 
         switch type {
         case "IMAGE":
-            return .text("[图片]", isMine: isMine, sender: sender)
+            let label = dto.content.hasPrefix("/") || dto.content.hasPrefix("http")
+                ? dto.content
+                : "[图片]"
+            return .text(label, isMine: isMine, sender: sender)
         case "VIDEO":
-            return .text("[视频]", isMine: isMine, sender: sender)
+            return .text(dto.content.isEmpty ? "[视频]" : dto.content, isMine: isMine, sender: sender)
         case "VOICE":
             return .text("[语音]", isMine: isMine, sender: sender)
         default:

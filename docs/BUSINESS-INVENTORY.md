@@ -27,7 +27,7 @@
 | **E4 业务 E2E** | 测试账号、测试钱包、操作前后对象与余额记录 | 真实业务闭环可用 |
 
 本轮最高证据含：**交易主链 API E4**（见 `docs/QA-RUNBOOK.md` 批次 e4-1784283980，curl 烟测）；
-领域/DTO **E3**（30 项）；公开路由 **E2**。  
+领域/DTO **E3**（72 项）；公开路由 **E2**。  
 **尚未**完成：Mac App UI 自动化 E4、正式 captcha/SMS、充值/提现、Socket E4。
 
 > 证据分层见 [GAP-AUDIT-REPORT.md](GAP-AUDIT-REPORT.md) 与验收标准 [GAP-ACCEPTANCE-CRITERIA.md](GAP-ACCEPTANCE-CRITERIA.md)。
@@ -122,7 +122,7 @@
 | 退出登录 | 已实现 | 侧栏底部 → `/auth/logout` |
 | 未读角标 | 已实现 | 侧栏「消息」+ `InboxState` |
 | 账号注册 | 已实现 | 登录页「注册」→ `/auth/send-code` + `/auth/register`；短信/hCaptcha 未配置时走临时 fallback |
-| 图形验证码 | 未实现 | `/captcha` 在线但 `siteKey=""`；登录页未接入，当前也没有可用站点配置 |
+| 图形验证码 | 客户端已实现 | 注册与重置密码发码前可展示 hCaptcha、服务端换取一次性 token；生产仍因 `siteKey=""` 运行 bypass |
 
 ---
 
@@ -440,7 +440,7 @@
 
 ### 自动化保护现状
 
-根 Swift Package 当前声明 **30 项 XCTest，本机已全部通过**（需指向完整 Xcode：
+根 Swift Package 当前声明 **72 项 XCTest，本机已全部通过**（需指向完整 Xcode：
 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`；若 `xcode-select` 仍指向
 Command Line Tools，会误报找不到 `XCTest`）。亦可用 `scripts/test-with-xcode.sh`。
 

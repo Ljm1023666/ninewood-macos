@@ -1,15 +1,15 @@
 import Foundation
 import Security
 
-enum KeychainTokenStore {
+struct KeychainTokenStore: APITokenStore {
     private static let service = "com.ninewood.macos.auth"
     private static let account = "ninewood_token"
 
-    static func load() -> String? {
+    func load() -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: Self.account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
@@ -20,24 +20,24 @@ enum KeychainTokenStore {
         return String(data: data, encoding: .utf8)
     }
 
-    static func save(_ token: String) {
+    func save(_ token: String) {
         delete()
         let data = Data(token.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: Self.account,
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
         SecItemAdd(query as CFDictionary, nil)
     }
 
-    static func delete() {
+    func delete() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: Self.account,
         ]
         SecItemDelete(query as CFDictionary)
     }

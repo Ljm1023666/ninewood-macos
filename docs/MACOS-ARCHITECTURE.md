@@ -126,7 +126,7 @@ xcodebuild \
   -scheme ninewood-macos \
   -configuration Debug \
   -destination 'platform=macOS,arch=arm64' \
-  build CODE_SIGNING_ALLOWED=NO
+  build CODE_SIGNING_ALLOWED=NO SWIFT_STRICT_CONCURRENCY=complete
 ```
 
 所有涉及发布、预付、结算、争议或删除的变更，除自动化测试外还必须执行

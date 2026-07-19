@@ -13,7 +13,7 @@
 | ID | 验收标准 | 判定 |
 |----|----------|------|
 | AC-0.1 | `BUSINESS-INVENTORY.md` 文首不再声称「写路径仍无 E4」；明确区分 **API E4** 与 **App UI E4** | 全文检索无冲突表述 |
-| AC-0.2 | §2.17 / §2.18 / §3 / §6 / §8 与 2026-07-18 现实一致：注册已实现、测试数=30、资金 mapper 无 minPrice 付款回退、BR-001/002 已关 | 人工对照 GAP 报告 §3.9 |
+| AC-0.2 | §2.17 / §2.18 / §3 / §6 / §8 与当前现实一致：注册已实现、测试数以 `swift test` 实采为准、资金 mapper 无 minPrice 付款回退、BR-001/002 已关 | 人工对照 GAP 报告 §3.9 |
 | AC-0.3 | `GAP-AUDIT-REPORT.md` 与本 AC 互相引用；本文件列出本轮修复范围 | 文件存在且交叉链接有效 |
 
 **本轮必须 pass。**
@@ -97,7 +97,7 @@
 
 | AC | 结果 | 日期 | 证据 |
 |----|------|------|------|
-| AC-0.1–0.3 | **pass** | 2026-07-18 | inventory 文首区分 API/App UI E4；与 `GAP-AUDIT-REPORT` 交叉链接；测试数更新为 30 |
+| AC-0.1–0.3 | **pass** | 2026-07-19 | inventory 文首区分 API/App UI E4；与 `GAP-AUDIT-REPORT` 交叉链接；测试数与自动化实采同步 |
 | AC-1.1–1.4 | **pass** | 2026-07-18 | `GET /captcha`→`mode=bypass`；`delivery=fallback`+code；`AUTH_SMS_FALLBACK=0`→503；生产已设 `=1`；RegisterView 开发通道横幅 |
 | AC-2.1–2.4 | **pass**（E1+契约） | 2026-07-18 | `AgentPendingToolEvent` + Sheet + `POST …/approve-tool`；只读/`navigate_to`/`tool_result` 不弹卡；单测 `testAgentPendingToolEventContract` |
 | AC-3.1–3.3 | **pass** | 2026-07-18 | `NotificationDeepLink`（order/demand/path/none）；NotificationsView 跳转；`testNotificationDeepLinkResolvesOrderDemandAndPath`；inventory 通知口径已更新 |

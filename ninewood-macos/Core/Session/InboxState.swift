@@ -1,15 +1,20 @@
 import Foundation
 import Observation
 
+@MainActor
+protocol MessageUnreadCounting {
+    func unreadCount() async throws -> Int
+}
+
 @Observable
 @MainActor
 final class InboxState {
     private(set) var unreadMessageCount = 0
     private(set) var lastError: String?
 
-    private let messages: MessageService
+    private let messages: any MessageUnreadCounting
 
-    init(messages: MessageService) {
+    init(messages: any MessageUnreadCounting) {
         self.messages = messages
     }
 

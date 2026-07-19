@@ -115,6 +115,7 @@ private struct ResetPasswordSheet: View {
     @State private var feedback: String?
     @State private var didSucceed = false
     @State private var sentHint: String?
+    @State private var captchaSiteKey: String?
 
     init(session: AppSession, initialPhone: String) {
         self.session = session
@@ -174,6 +175,21 @@ private struct ResetPasswordSheet: View {
             }
         }
         .padding(24)
+        .sheet(isPresented: Binding(
+            get: { captchaSiteKey != nil },
+            set: { if !$0 { captchaSiteKey = nil } }
+        )) {
+            if let captchaSiteKey {
+                HCaptchaChallengeView(
+                    siteKey: captchaSiteKey,
+                    onSolved: { token in
+                        self.captchaSiteKey = nil
+                        Task { await verifyAndSendResetCode(challengeToken: token) }
+                    },
+                    onCancel: { self.captchaSiteKey = nil }
+                )
+            }
+        }
     }
 
     private func sendCode() async {
@@ -182,16 +198,42 @@ private struct ResetPasswordSheet: View {
         sentHint = nil
         defer { isSendingCode = false }
         do {
-            let token = try await session.captchaService.obtainSendCodeToken()
-            let result = try await session.authService.sendResetCode(phone: phone, captchaToken: token)
-            if let code = result.code, !code.isEmpty {
-                sentHint = "验证码已发送（开发通道：\(code)）"
-                self.code = code
+            let status = try await session.captchaService.status()
+            let siteKey = status.siteKey ?? ""
+            if status.mode == "bypass" || siteKey.isEmpty {
+                try await sendResetCodeRequest(
+                    captchaToken: CaptchaService.unconfiguredBypassToken
+                )
             } else {
-                sentHint = "验证码已发送，请查收短信"
+                captchaSiteKey = siteKey
             }
         } catch {
             feedback = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func verifyAndSendResetCode(challengeToken: String) async {
+        isSendingCode = true
+        feedback = nil
+        defer { isSendingCode = false }
+        do {
+            let verifiedToken = try await session.captchaService.verifyChallengeToken(challengeToken)
+            try await sendResetCodeRequest(captchaToken: verifiedToken)
+        } catch {
+            feedback = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func sendResetCodeRequest(captchaToken: String) async throws {
+        let result = try await session.authService.sendResetCode(
+            phone: phone,
+            captchaToken: captchaToken
+        )
+        if let returnedCode = result.code, !returnedCode.isEmpty {
+            sentHint = "验证码已发送（开发通道：\(returnedCode)）"
+            code = returnedCode
+        } else {
+            sentHint = "验证码已发送，请查收短信"
         }
     }
 

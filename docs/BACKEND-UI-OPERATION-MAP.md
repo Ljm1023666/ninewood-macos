@@ -136,7 +136,7 @@
 
 | # | 区域 | 控件 | 操作 | 前端效果 | 后端契约 | 状态 |
 |---|------|------|------|----------|----------|------|
-| P01 | 顶栏 | 保存草稿 | 点击 | 本地成功条 | 草稿持久化 API | **缺失**（现仅本地） |
+| P01 | 顶栏 | 保存草稿 | 点击 | 云端 DRAFT | `POST /demands/drafts` | 已接（设计预览本地 toast） |
 | P02 | 工具栏 | 取消 | 点击 | dismiss（非嵌入） | 仅本地 | 仅本地 |
 | P03 | 表单 | 标题 | 输入 | draft | 提交字段 `title` | 仅本地→提交 |
 | P04 | 表单 | 期望效果 | 输入 | draft | `expectedOutcome` | 同上 |
@@ -258,6 +258,7 @@
 | M11 | 气泡 | 需求卡/服务卡 | 点击 | 深链详情 | `GET /demands/:id` / `GET /service-cards/:id` | 已接 |
 | M12 | Socket | (auto) | 增量消息 | 刷新收件箱 | Socket.IO 事件 | 部分实现 |
 | M13 | 右侧信息 | 静态链接 | — | 多为装饰 | 对方资料等 | 预览弱 |
+| M14 | 输入 | 图片 PhotosPicker | 选图 | 私聊发图 | `POST /messages/send` multipart `file` | 已接（2026-07-19 烟测 IMAGE=1） |
 
 ---
 
@@ -377,6 +378,7 @@
 | MD07 | 详情 | 打开详情 | 导航 | DemandDetailView | `GET /demands/:id` | 已接 |
 | MD08 | 申请人 | 接受 | 点击 | 成单提示 | `POST /demands/:id/accept/:applicantId` | 已接 |
 | MD09 | 申请人 | 拒绝 | 点击 | 拒绝 | `POST /demands/:id/reject/:applicantId` | 已接 |
+| MD13 | 工具栏 | 草稿箱 | 点击 | Sheet 列表/发布 | `GET /demands/drafts` · `POST /demands/drafts/:id/publish` | 已接（2026-07-19） |
 | MD10 | [预览] | 状态 Tab | 点击 | 本地滤 | 可选服务端 stage | 仅本地 |
 | MD11 | [预览] | 发布新需求 | 点击 | No-op | 跳转发布 / POST demands | **未接** |
 | MD12 | [预览] | 撤回/删除/接受/拒绝/下载 | 点击 | No-op | 同 MD04–09 | 预览 |

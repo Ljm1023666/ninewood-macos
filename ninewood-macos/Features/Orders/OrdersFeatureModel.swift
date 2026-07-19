@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+@MainActor
+protocol OrderListing {
+    func list(role: String?, page: Int) async throws -> [Order]
+}
+
 @Observable
 @MainActor
 final class OrdersFeatureModel {
@@ -35,10 +40,22 @@ final class OrdersFeatureModel {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
-    private let repository: OrderRepository
+    private let repository: (any OrderListing)?
     private let isPreview: Bool
 
-    init(repository: OrderRepository, previewOrders: [Order]? = nil) {
+    init(repository: any OrderListing) {
+        self.repository = repository
+        self.isPreview = false
+    }
+
+    init(previewOrders: [Order]) {
+        self.repository = nil
+        self.isPreview = true
+        self.orders = previewOrders
+        self.selected = previewOrders.first
+    }
+
+    init(repository: any OrderListing, previewOrders: [Order]?) {
         self.repository = repository
         self.isPreview = previewOrders != nil
         self.orders = previewOrders ?? []
@@ -62,13 +79,14 @@ final class OrdersFeatureModel {
 
     func load() async {
         if isPreview { return }
+        guard let repository else { return }
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
         do {
-            let rows = try await repository.list(role: roleFilter.apiRole)
+            let rows = try await repository.list(role: roleFilter.apiRole, page: 1)
             orders = rows
             if let selectedID = selected?.id {
                 selected = rows.first(where: { $0.id == selectedID }) ?? rows.first

@@ -29,7 +29,8 @@ enum ChatRealtimePayload {
             ?? nestedString(dict, path: ["toUser", "id"])
             ?? ""
         let content = (dict["content"] as? String) ?? ""
-        guard !from.isEmpty, !content.isEmpty else { return nil }
+        let hasCardAttachment = hasCardAttachment(dict)
+        guard !from.isEmpty, !content.isEmpty || hasCardAttachment else { return nil }
 
         let id = (dict["id"] as? String) ?? UUID().uuidString
         let createdAt: Date
@@ -45,15 +46,16 @@ enum ChatRealtimePayload {
             toUserId: to,
             content: content,
             createdAt: createdAt,
-            hasCardAttachment: hasCardAttachment(dict),
+            hasCardAttachment: hasCardAttachment,
             mergeId: dict["mergeId"] as? String
         )
     }
 
     private static func hasCardAttachment(_ dict: [String: Any]) -> Bool {
-        if dict["cardAttachment"] != nil { return true }
         if let nested = dict["cardAttachment"] as? [String: Any], !nested.isEmpty { return true }
-        if dict["card_attachment"] != nil { return true }
+        if let nested = dict["cardAttachment"] as? NSDictionary, nested.count > 0 { return true }
+        if let nested = dict["card_attachment"] as? [String: Any], !nested.isEmpty { return true }
+        if let nested = dict["card_attachment"] as? NSDictionary, nested.count > 0 { return true }
         return false
     }
 

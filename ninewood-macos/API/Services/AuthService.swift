@@ -26,7 +26,7 @@ struct RegisterRequest: Encodable {
 }
 
 @MainActor
-final class AuthService {
+final class AuthService: AuthServicing {
     private let client: APIClient
 
     init(client: APIClient) {
