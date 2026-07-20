@@ -9,11 +9,14 @@ struct NWMarkdownChatText: View {
     var body: some View {
         Group {
             if isUser {
+                // 先按 maxWidth 折行，再 fixedSize：短句贴合文字，长句不超过上限（避免气泡被撑满宽）
                 Text(markdown)
                     .font(.body)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppTheme.onSurface)
+                    .multilineTextAlignment(.leading)
                     .textSelection(.enabled)
                     .frame(maxWidth: maxContentWidth, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: false)
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(Array(Self.parseBlocks(markdown).enumerated()), id: \.offset) { _, block in
@@ -21,6 +24,7 @@ struct NWMarkdownChatText: View {
                     }
                 }
                 .frame(maxWidth: maxContentWidth, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

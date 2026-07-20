@@ -74,10 +74,11 @@ struct DiscoverView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "line.3.horizontal.decrease")
                             .font(.system(size: 12, weight: .semibold))
-                        Text(showNearbyOnly ? "仅附近" : "筛选")
+                        Text(showNearbyOnly ? "仅附近" : "附近")
                             .font(.system(size: 13, weight: .medium))
                     }
                     .foregroundStyle(showNearbyOnly ? AppTheme.primary : AppTheme.secondaryLabel)
+                    .help(showNearbyOnly ? "已开启：只看允许附近发现的需求" : "点击后只看允许附近发现的需求")
                 }
                 .buttonStyle(.plain)
             }

@@ -407,17 +407,21 @@ private struct OrdersDesignReferenceDetail: View {
         .safeAreaInset(edge: .bottom) {
             HStack {
                 Button("取消订单") {}
-                    .foregroundStyle(AppTheme.error)
+                    .foregroundStyle(AppTheme.secondaryLabel)
+                    .disabled(true)
+                    .help("设计预览不可操作")
                 Spacer()
                 Button {} label: {
                     Text("确认预付")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppTheme.secondaryLabel)
                         .padding(.horizontal, 24)
                         .frame(height: 42)
-                        .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: AppTheme.buttonRadius))
+                        .background(AppTheme.fill, in: RoundedRectangle(cornerRadius: AppTheme.buttonRadius))
                 }
                 .buttonStyle(.plain)
+                .disabled(true)
+                .help("设计预览不可预付；线上请打开真实订单详情")
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
@@ -501,7 +505,9 @@ private struct OrdersDesignReferenceDetail: View {
                 .font(.caption)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(AppTheme.primary)
+            .foregroundStyle(AppTheme.secondaryLabel)
+            .disabled(true)
+            .help("设计预览不可打开需求链")
         }
         .padding(16)
         .ninewoodCard()
@@ -1108,31 +1114,87 @@ private struct ReviewOrderSheet: View {
     @State private var rating = 5
     @State private var content = ""
     @State private var isSubmitting = false
+    @State private var errorMessage: String?
+
+    private let ratingHints = [
+        1: "很不满意",
+        2: "不太满意",
+        3: "一般",
+        4: "比较满意",
+        5: "非常满意",
+    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("评价服务").font(.title2.bold())
-            Stepper("评分：\(rating) 星", value: $rating, in: 1...5)
+            Text("为本次服务给出总体评分")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                ForEach(1...5, id: \.self) { star in
+                    Button {
+                        rating = star
+                    } label: {
+                        Image(systemName: star <= rating ? "star.fill" : "star")
+                            .font(.title2)
+                            .foregroundStyle(star <= rating ? Color.orange : AppTheme.secondaryLabel)
+                    }
+                    .buttonStyle(.plain)
+                    .help("\(star) 星")
+                }
+                Text(ratingHints[rating] ?? "")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppTheme.onSurface)
+                    .padding(.leading, 4)
+            }
+
             TextEditor(text: $content)
+                .font(.body)
                 .frame(minHeight: 100)
                 .padding(8)
+                .scrollContentBackground(.hidden)
                 .background(AppTheme.fill)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(alignment: .topLeading) {
+                    if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("可选：服务是否如约、沟通是否顺畅…")
+                            .font(.body)
+                            .foregroundStyle(AppTheme.secondaryLabel)
+                            .padding(16)
+                            .allowsHitTesting(false)
+                    }
+                }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.error)
+            }
+
             HStack {
-                Button("取消") { dismiss() }
+                Button("稍后再说") { dismiss() }
                 Spacer()
-                Button("提交评价") {
+                Button {
                     Task { await submit() }
+                } label: {
+                    if isSubmitting {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("提交评价")
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(isSubmitting)
             }
         }
         .padding(24)
+        .frame(minWidth: 420)
     }
 
     private func submit() async {
         isSubmitting = true
+        errorMessage = nil
         defer { isSubmitting = false }
         do {
             try await session.reviewService.create(
@@ -1145,8 +1207,7 @@ private struct ReviewOrderSheet: View {
             onDone("评价已提交")
             dismiss()
         } catch {
-            onDone((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
-            dismiss()
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 }

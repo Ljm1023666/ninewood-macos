@@ -5,10 +5,21 @@ struct AgentNavigationEvent: Equatable {
     let title: String?
 
     static func decode(event: String, data: String) -> AgentNavigationEvent? {
-        guard event.lowercased().replacingOccurrences(of: "-", with: "_") == "tool_result",
-              let payload = data.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
-              object["name"] as? String == "navigate_to",
+        let normalized = event.lowercased().replacingOccurrences(of: "-", with: "_")
+        guard normalized == "tool_result" || normalized == "navigate" else { return nil }
+
+        guard let payload = data.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any]
+        else {
+            return nil
+        }
+
+        if normalized == "navigate" {
+            guard let path = object["path"] as? String, path.hasPrefix("/") else { return nil }
+            return AgentNavigationEvent(path: path, title: object["title"] as? String)
+        }
+
+        guard object["name"] as? String == "navigate_to",
               object["success"] as? Bool == true,
               let result = object["data"] as? [String: Any],
               let path = result["path"] as? String,
@@ -16,7 +27,29 @@ struct AgentNavigationEvent: Equatable {
         else {
             return nil
         }
+        if let pending = result["pending"] as? Bool, pending { return nil }
         return AgentNavigationEvent(path: path, title: result["title"] as? String)
+    }
+}
+
+struct AgentForbiddenEvent: Equatable {
+    let message: String
+    let fallbackPage: String?
+
+    static func decode(event: String, data: String) -> AgentForbiddenEvent? {
+        guard event.lowercased().replacingOccurrences(of: "-", with: "_") == "forbidden",
+              let payload = data.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              let message = object["message"] as? String,
+              !message.isEmpty
+        else {
+            return nil
+        }
+        let fallback = (object["fallbackPage"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return AgentForbiddenEvent(
+            message: message,
+            fallbackPage: fallback?.isEmpty == false ? fallback : nil
+        )
     }
 }
 
@@ -25,6 +58,8 @@ struct AgentPendingToolEvent: Identifiable, Equatable, Sendable {
     let name: String
     let message: String
     let argumentsSummary: String
+    /// 扁平化参数，供发布页草稿交接（禁止聊天内静默提交时使用）。
+    let argumentValues: [String: String]
 
     static func decode(event: String, data: String) -> AgentPendingToolEvent? {
         let normalized = event.lowercased().replacingOccurrences(of: "-", with: "_")
@@ -43,13 +78,22 @@ struct AgentPendingToolEvent: Identifiable, Equatable, Sendable {
             id: id,
             name: name,
             message: message.isEmpty ? "助手请求执行「\(name)」" : message,
-            argumentsSummary: summarizeArguments(args)
+            argumentsSummary: summarizeArguments(args),
+            argumentValues: flattenArguments(args)
         )
+    }
+
+    private static func flattenArguments(_ args: [String: Any]) -> [String: String] {
+        var out: [String: String] = [:]
+        for (key, value) in args {
+            out[key] = stringify(value)
+        }
+        return out
     }
 
     private static func summarizeArguments(_ args: [String: Any]) -> String {
         guard !args.isEmpty else { return "（无参数）" }
-        let preferred = ["title", "demandId", "orderId", "applicantId", "content", "description", "path"]
+        let preferred = ["title", "demandId", "orderId", "applicantId", "content", "description", "path", "budget", "category"]
         var lines: [String] = []
         for key in preferred {
             if let value = args[key] {

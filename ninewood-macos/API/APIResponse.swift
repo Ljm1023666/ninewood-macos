@@ -176,6 +176,19 @@ indirect enum LoopJSONValue: Codable, Hashable, Sendable {
     }
 }
 
+struct LoopOfferingMetricsDTO: Decodable, Sendable {
+    let dealRate: Double?
+    let avgDurationMs: Double?
+    let publicSuccessRate: Double?
+    let sampleSize: Int?
+    let successRateStatus: String?
+}
+
+struct LoopVerificationSummaryDTO: Decodable, Sendable {
+    let status: String?
+    let verifierCount: Int?
+}
+
 struct LoopOfferingItemDTO: Decodable, Identifiable {
     let id: String
     let title: String
@@ -186,10 +199,28 @@ struct LoopOfferingItemDTO: Decodable, Identifiable {
     let definitionDescription: String?
     let paths: [String]?
     let requiresVerification: Bool?
+    let metrics: LoopOfferingMetricsDTO?
+    let verification: LoopVerificationSummaryDTO?
+    let inputSchema: LoopJSONValue?
+    let outcomeSchema: LoopJSONValue?
+}
+
+struct LoopResolvedQueryDTO: Decodable, Sendable {
+    let paths: [String]?
+    let facets: [String]?
+    let suggestions: [String]?
+    let status: String?
+}
+
+struct LoopMatchDTO: Decodable, Sendable {
+    let matchedPaths: [String]?
+    let textMatched: Bool?
+    let reasons: [String]?
 }
 
 struct LoopRecommendationResultDTO: Decodable {
     let query: String?
+    let resolved: LoopResolvedQueryDTO?
     let items: [LoopRecommendationDTO]
     let humanFallback: HumanFallbackDTO?
 }
@@ -201,9 +232,13 @@ struct LoopRecommendationDTO: Decodable, Identifiable {
     let loopKind: String
     let definitionCode: String?
     let definitionName: String?
+    let definitionDescription: String?
     let paths: [String]?
     let requiresVerification: Bool?
     let executionMode: String?
+    let metrics: LoopOfferingMetricsDTO?
+    let verification: LoopVerificationSummaryDTO?
+    let match: LoopMatchDTO?
 }
 
 struct HumanFallbackDTO: Decodable {
@@ -211,6 +246,7 @@ struct HumanFallbackDTO: Decodable {
     let title: String?
     let description: String?
     let paths: [String]?
+    let facets: [String]?
     let requiresConfirmation: Bool?
 }
 
@@ -316,12 +352,20 @@ struct MyLoopItemDTO: Decodable, Identifiable {
     let offering: LoopOfferingBriefDTO?
 }
 
+struct MyLoopKindSummaryDTO: Decodable, Sendable {
+    let total: Int?
+    let active: Int?
+    let succeeded: Int?
+    let successRate: Double?
+}
+
 struct MyLoopSummaryDTO: Decodable {
     let total: Int?
     let active: Int?
     let succeeded: Int?
     let failed: Int?
     let successRate: Double?
+    let byKind: [String: MyLoopKindSummaryDTO]?
 }
 
 struct HeavenCapabilityDTO: Decodable, Identifiable {

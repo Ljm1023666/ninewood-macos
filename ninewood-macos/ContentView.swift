@@ -68,6 +68,8 @@ struct ContentView: View {
 /// know the app's internal navigation names.
 private enum DesignPreviewPage: String {
     case login, register, discover, cardPool = "card-pool", publish, circles, loops
+    case loopsDiscover = "loops-discover", loopsMine = "loops-mine"
+    case demandCreate = "demand-create", serviceCreate = "service-create"
     case findPeople = "find-people", messagesDirect = "messages-direct"
     case certification, messagesGroup = "messages-group", profile
     case orders, myDemands = "my-demands", wallet
@@ -89,8 +91,12 @@ private enum DesignPreviewPage: String {
             "03": .discover, "03-discover": .discover,
             "04": .cardPool, "04-card-pool": .cardPool,
             "05": .publish, "05-publish": .publish,
+            "05a": .demandCreate, "05-demand-create": .demandCreate, "demand-create": .demandCreate,
+            "05b": .serviceCreate, "05-service-create": .serviceCreate, "service-create": .serviceCreate,
             "06": .circles, "06-circles": .circles,
-            "07": .loops, "07-natural-loop": .loops,
+            "07": .loops, "07-natural-loop": .loops, "loops": .loops,
+            "07a": .loopsDiscover, "loops-discover": .loopsDiscover, "loop-discover": .loopsDiscover,
+            "07b": .loopsMine, "loops-mine": .loopsMine, "loop-mine": .loopsMine,
             "08": .findPeople, "08-find-people": .findPeople,
             "09": .messagesDirect, "09-messages-direct": .messagesDirect,
             "10": .certification, "10-certification": .certification,
@@ -145,11 +151,19 @@ private enum DesignPreviewPage: String {
                 initialSelection: .cardPool
             )
         case .publish:
-            MainShellView(initialSelection: .publish)
+            MainShellView(initialSelection: .publish, initialPath: "/publish")
+        case .demandCreate:
+            MainShellView(initialSelection: .publish, initialPath: "/demands/create")
+        case .serviceCreate:
+            MainShellView(initialSelection: .publish, initialPath: "/service-cards/create")
         case .circles:
             MainShellView(designPreviewCircles: CirclesDesignPreviewFixtures.circles, initialSelection: .circles)
         case .loops:
-            MainShellView(designPreviewLoopCollection: NaturalLoopDesignPreviewFixtures.collection, initialSelection: .loops)
+            MainShellView(initialSelection: .loops, initialPath: "/loops/discover")
+        case .loopsDiscover:
+            MainShellView(initialSelection: .loops, initialPath: "/loops/discover")
+        case .loopsMine:
+            MainShellView(initialSelection: .loops, initialPath: "/loops/mine")
         case .findPeople:
             MainShellView(designPreviewUsers: AccountDesignPreviewFixtures.users, initialSelection: .searchPeople)
         case .certification:
@@ -201,8 +215,7 @@ private enum DesignPreviewPage: String {
         case .agent:
             MainShellView(
                 designPreviewOrders: OrdersDesignPreviewFixtures.orders,
-                initialSelection: .profile,
-                profileInitialPath: "/agent"
+                initialSelection: .agent
             )
         case .settings:
             MainShellView(initialSelection: .profile, profileInitialPath: "/settings")

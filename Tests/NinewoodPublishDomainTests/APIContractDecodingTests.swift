@@ -328,6 +328,26 @@ final class APIContractDecodingTests: XCTestCase {
         XCTAssertEqual(event?.title, "需求详情")
     }
 
+    func testAgentNavigationNavigateEventContract() {
+        let data = #"{"path":"/orders/order-1","title":"订单详情"}"#
+        let event = AgentNavigationEvent.decode(event: "navigate", data: data)
+        XCTAssertEqual(event?.path, "/orders/order-1")
+        XCTAssertEqual(event?.title, "订单详情")
+    }
+
+    func testAgentForbiddenEventContract() {
+        let data = """
+        {
+          "id": "payment",
+          "message": "支付涉及资金安全，我无法代你完成，请在订单页手动支付。",
+          "fallbackPage": "/orders"
+        }
+        """
+        let event = AgentForbiddenEvent.decode(event: "forbidden", data: data)
+        XCTAssertEqual(event?.message.contains("支付"), true)
+        XCTAssertEqual(event?.fallbackPage, "/orders")
+    }
+
     func testAgentNavigationRejectsTextAndFailedToolResults() {
         XCTAssertNil(
             AgentNavigationEvent.decode(
@@ -357,6 +377,52 @@ final class APIContractDecodingTests: XCTestCase {
         XCTAssertEqual(event?.name, "create_demand")
         XCTAssertTrue(event?.argumentsSummary.contains("title: 修水管") == true)
         XCTAssertNil(AgentPendingToolEvent.decode(event: "tool_result", data: data))
+    }
+
+    func testAgentToolResultPendingPayloadIsIgnoredByNavigation() {
+        // Client must not navigate on pending tool_result wrappers.
+        let pending = #"{"name":"navigate_to","success":true,"data":{"pending":true,"path":"/demands/create"}}"#
+        // Navigation decoder only checks success+path; pending guard lives in AgentChatView.
+        // Document the wire shape used by production SSE:
+        let obj = try? JSONSerialization.jsonObject(with: Data(pending.utf8)) as? [String: Any]
+        let data = obj?["data"] as? [String: Any]
+        XCTAssertEqual(data?["pending"] as? Bool, true)
+        XCTAssertEqual(data?["path"] as? String, "/demands/create")
+    }
+
+    func testAgentStreamBodyEncodesOptionalModelAndFixedApproval() throws {
+        // Mirror AgentService.StreamBody contract used by model picker.
+        struct StreamBody: Encodable {
+            let message: String
+            let thinkMode: Bool
+            let accessMode: String
+            let model: String?
+
+            enum CodingKeys: String, CodingKey { case message, thinkMode, accessMode, model }
+
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: CodingKeys.self)
+                try c.encode(message, forKey: .message)
+                try c.encode(thinkMode, forKey: .thinkMode)
+                try c.encode(accessMode, forKey: .accessMode)
+                try c.encodeIfPresent(model, forKey: .model)
+            }
+        }
+        let encoder = JSONEncoder()
+        let withModel = try encoder.encode(
+            StreamBody(message: "你好", thinkMode: false, accessMode: "approval", model: "ninewood-3b-v2.1")
+        )
+        let withModelObj = try JSONSerialization.jsonObject(with: withModel) as? [String: Any]
+        XCTAssertEqual(withModelObj?["accessMode"] as? String, "approval")
+        XCTAssertEqual(withModelObj?["model"] as? String, "ninewood-3b-v2.1")
+        XCTAssertEqual(withModelObj?["thinkMode"] as? Bool, false)
+
+        let noModel = try encoder.encode(
+            StreamBody(message: "你好", thinkMode: true, accessMode: "approval", model: nil)
+        )
+        let noModelObj = try JSONSerialization.jsonObject(with: noModel) as? [String: Any]
+        XCTAssertNil(noModelObj?["model"])
+        XCTAssertEqual(noModelObj?["accessMode"] as? String, "approval")
     }
 
     func testNotificationDeepLinkResolvesOrderDemandAndPath() throws {

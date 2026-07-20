@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "release_id": "work-runtime-v1",
+  "version": "1.2.0",
+  "created_at": "2026-07-20T15:30:00+08:00",
+  "updated_at": "2026-07-20T15:45:00+08:00",
+  "purpose": "Work Agent runtime guards — search args, narration cap, capability query, vague-search header, SSE list bloat",
+  "patches": [
+    {
+      "id": "search-argument-guard",
+      "script": "patch-search-argument-guard.py",
+      "modules": ["search-argument-guard.ts"],
+      "tests": ["search-argument-guard.test.ts"]
+    },
+    {
+      "id": "live-api-quality",
+      "script": "patch-live-api-quality.py",
+      "modules": ["list-narration-cap.ts", "capability-query.ts"],
+      "tests": ["live-api-quality.test.ts"],
+      "server_edits": ["tool-runner.ts", "executor.ts", "tools.ts"]
+    },
+    {
+      "id": "sse-bloat",
+      "script": "patch-sse-bloat.py",
+      "modules": ["list-narration-cap.ts"],
+      "server_edits": ["tool-runner.ts", "executor.ts"]
+    },
+    {
+      "id": "demand-draft-multiturn",
+      "script": "patch-demand-draft.py",
+      "modules": ["demand-draft.ts", "sanitize-assistant-text.ts"],
+      "tests": ["demand-draft.test.ts"],
+      "server_edits": ["executor.ts"]
+    }
+  ],
+  "deploy_entrypoint": "deploy-work-runtime-v1.sh",
+  "server_root": "/opt/ninewood/server",
+  "pm2_process": "ninewood",
+  "vitest_filter": "search-argument-guard live-api-quality",
+  "live_api_evidence": "eval/scores/20260720-1304-work-qwen25-3b-rollback-0000100/live_api.json",
+  "notes": "Does not change AI_MODEL or adapter weights. Idempotent apply + backup on each file."
+}

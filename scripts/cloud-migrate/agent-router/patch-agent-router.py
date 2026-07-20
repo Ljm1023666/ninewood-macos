@@ -356,7 +356,9 @@ def patch_executor() -> None:
         """import { matchForbidden, type Capability } from './capability-matcher.js';
 import { routeIntent, type IntentRoute } from './intent-router.js';
 import { executeCapabilityPlaybook } from './playbook-executor.js';
-import { buildFidelityPrompt } from './data-fidelity.js';""",
+import { buildFidelityPrompt } from './data-fidelity.js';
+import { buildDemandDraft } from './demand-draft.js';
+import { guardToolInvocations } from './search-argument-guard.js';""",
     )
     text = text.replace(
         "import { inferFollowUpTools, type ExecutedTool } from './follow-up-tools.js';",
@@ -429,8 +431,13 @@ import { buildFidelityPrompt } from './data-fidelity.js';""",
 """
     routed = """    await truncateTitle(conversationId, message);
 
+    const demandDraft = buildDemandDraft(history, message)
+    const routedContext = {
+      ...(params.context ?? {}),
+      ...(demandDraft.active ? { demandDraft } : {}),
+    }
     const route: IntentRoute = config.agentRouter.enabled
-      ? routeIntent(message, params.context)
+      ? routeIntent(message, routedContext)
       : { kind: 'fallback', confidence: 0, reason: 'router-disabled', fidelity: [] }
     const effectiveThinking = route.kind === 'analytical' ? true : thinking
     const selectedModel = model || (effectiveThinking ? config.aiThinkModel : config.aiFastModel)
@@ -442,7 +449,7 @@ import { buildFidelityPrompt } from './data-fidelity.js';""",
         route.capability,
         message,
         toolCtx,
-        params.context,
+        routedContext,
       )
       if (fast.completed) {
         await addMessage({
@@ -471,7 +478,10 @@ import { buildFidelityPrompt } from './data-fidelity.js';""",
       {
         useTools: roundUsesTools,
         accessMode,
-        context: params.context,
+        context: {
+          ...routedContext,
+          routeArguments: route.arguments,
+        },
         capability: route.capability,
         userMessage: message,
       },
@@ -489,7 +499,7 @@ import { buildFidelityPrompt } from './data-fidelity.js';""",
         route.capability,
         message,
         toolCtx,
-        params.context,
+        routedContext,
       )
       allStoredCalls.push(...gathered.storedCalls)
       allExecuted.push(...gathered.executed)
@@ -536,6 +546,20 @@ import { buildFidelityPrompt } from './data-fidelity.js';""",
       thinking: lastRoundThinking || undefined,""",
         1,
     )
+
+    # Fallback/model tool calls must pass the same explicit-slot guard as the
+    # deterministic playbook. This is the final boundary before tool execution.
+    if "guardToolInvocations(toolInvocations, message)" not in text:
+        text, guard_count = re.subn(
+            r"processToolInvocations\(\s*toolInvocations\s*,\s*toolCtx\s*\)",
+            "processToolInvocations(guardToolInvocations(toolInvocations, message), toolCtx)",
+            text,
+        )
+        if guard_count < 1:
+            raise RuntimeError(
+                "executor model tool invocation boundary not found; "
+                "refuse to deploy search argument guard partially"
+            )
     legacy_follow_up = """      // 首轮意图跟进（如「搜索并打开第一个」）
       let followUpExtras: Awaited<ReturnType<typeof processToolInvocations>> | null = null;
       if (chainDepth === 0) {
@@ -726,7 +750,24 @@ def patch_existing_tests() -> None:
     print(f"patched: {path}")
 
 
+def install_runtime_modules() -> None:
+    for name in (
+        "demand-draft.ts",
+        "demand-result-guard.ts",
+        "search-argument-guard.ts",
+    ):
+        source = Path(__file__).with_name(name)
+        target = ROOT / "src/services/agent" / name
+        if not source.exists():
+            raise RuntimeError(f"missing runtime module: {source}")
+        if target.exists():
+            backup(target)
+        shutil.copy2(source, target)
+        print(f"installed: {target}")
+
+
 def main() -> None:
+    install_runtime_modules()
     patch_config()
     patch_matcher()
     patch_tools()
@@ -739,4 +780,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

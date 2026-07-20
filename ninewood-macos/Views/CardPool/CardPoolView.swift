@@ -472,7 +472,7 @@ struct CardPoolView: View {
     }
 
     private func serviceModeText(_ demand: Demand) -> String {
-        demand.allowNearby ? "一对一" : "一对多"
+        demand.applicantLimit <= 1 ? "一对一" : "一对多"
     }
 
     private func countdownDisplay(_ text: String) -> String {
@@ -639,7 +639,7 @@ private struct CardPoolReferenceDetail: View {
 
                     HStack(alignment: .top, spacing: 0) {
                         stat("预算范围", rewardLabel, AppTheme.primary)
-                        stat("服务模式", demand.allowNearby ? "一对一" : "一对多")
+                        stat("服务模式", demand.applicantLimit <= 1 ? "一对一" : "一对多")
                         stat("剩余可见", demand.countdownText)
                     }
                     sectionDivider()
@@ -756,10 +756,12 @@ private struct CardPoolReferenceDetail: View {
                 Button("参与应标") {}
                     .buttonStyle(.plain)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppTheme.secondaryLabel)
                     .frame(maxWidth: .infinity)
                     .frame(height: 42)
-                    .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(AppTheme.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .disabled(true)
+                    .help("设计预览不可提交应标；线上请在卡池详情操作")
 
                 Button(action: onOpenServiceCards) {
                     Text("查看我的服务卡")

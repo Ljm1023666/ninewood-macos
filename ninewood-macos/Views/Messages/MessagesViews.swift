@@ -655,7 +655,7 @@ private struct MessagesReferencePreview: View {
                         .background(AppTheme.surfaceLow, in: Circle())
                 }
                 .buttonStyle(.plain)
-                .help("发送我的需求卡或服务卡")
+                .help(chatModel.canAttachMedia ? "发送我的需求卡或服务卡" : "当前不可发送附件")
                 .disabled(!chatModel.canAttachMedia)
 
                 PhotosPicker(selection: $dmPhotoItem, matching: .images) {
@@ -665,7 +665,7 @@ private struct MessagesReferencePreview: View {
                         .background(AppTheme.surfaceLow, in: Circle())
                 }
                 .buttonStyle(.plain)
-                .help("发送图片")
+                .help(chatModel.canAttachMedia ? "发送图片" : "当前不可发送附件")
                 .disabled(!chatModel.canAttachMedia)
 
                 Spacer()
@@ -885,14 +885,12 @@ private struct MessagesReferencePreview: View {
                 Button("延长 5 分钟") {}
                     .buttonStyle(.plain)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppTheme.primary)
+                    .foregroundStyle(AppTheme.secondaryLabel)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(AppTheme.primary.opacity(0.55), lineWidth: 1)
-                    }
+                    .background(AppTheme.fill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .disabled(true)
+                    .help("设计预览不可延长；线上会话会显示真实剩余时间")
                 Image(systemName: "ellipsis")
                     .foregroundStyle(.secondary)
             }
@@ -1040,6 +1038,8 @@ private struct MessagesReferencePreview: View {
                         .background(AppTheme.surfaceLow, in: Circle())
                 }
                 .buttonStyle(.plain)
+                .disabled(true)
+                .help("设计预览不可发卡")
                 Button {} label: {
                     Label("需求卡", systemImage: "rectangle.stack")
                         .font(.caption.weight(.semibold))
@@ -1055,6 +1055,8 @@ private struct MessagesReferencePreview: View {
                         }
                 }
                 .buttonStyle(.plain)
+                .disabled(true)
+                .help("设计预览不可发卡")
                 Spacer()
             }
             HStack(alignment: .bottom, spacing: 10) {
@@ -1067,12 +1069,14 @@ private struct MessagesReferencePreview: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(AppTheme.outlineVariant, lineWidth: 1)
                     }
-                Button("发送") { draft = "" }
+                Button("发送") {}
                     .buttonStyle(.plain)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppTheme.secondaryLabel)
                     .frame(width: 64, height: 36)
-                    .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(AppTheme.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .disabled(true)
+                    .help("设计预览不可发送；线上会话可真实发消息")
             }
         }
         .padding(12)
@@ -1269,10 +1273,12 @@ private struct MessagesReferencePreview: View {
             Button("延长 5 分钟") {}
                 .buttonStyle(.plain)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppTheme.secondaryLabel)
                 .frame(maxWidth: .infinity)
                 .frame(height: 36)
-                .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(AppTheme.fill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .disabled(true)
+                .help("设计预览不可延长")
         }
         .padding(12)
         .ninewoodCard()
@@ -2619,14 +2625,14 @@ struct ChatDetailView: View {
                     Image(systemName: "paperclip")
                 }
                 .buttonStyle(.bordered)
-                .help("发送我的需求卡或服务卡")
+                .help(model.canAttachMedia ? "发送我的需求卡或服务卡" : "当前不可发送附件")
                 .disabled(!model.canAttachMedia)
 
                 PhotosPicker(selection: $dmPhotoItem, matching: .images) {
                     Image(systemName: "photo")
                 }
                 .buttonStyle(.bordered)
-                .help("发送图片")
+                .help(model.canAttachMedia ? "发送图片" : "当前不可发送附件")
                 .disabled(!model.canAttachMedia)
 
                 TextField("发送消息…", text: $model.draft)

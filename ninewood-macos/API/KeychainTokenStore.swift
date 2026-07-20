@@ -1,7 +1,8 @@
 import Foundation
 import Security
 
-struct KeychainTokenStore: APITokenStore {
+/// Keychain 读写与 UI 无关；显式非隔离，避免默认 MainActor 污染 `APIClient` 默认参数。
+nonisolated struct KeychainTokenStore: APITokenStore {
     private static let service = "com.ninewood.macos.auth"
     private static let account = "ninewood_token"
 

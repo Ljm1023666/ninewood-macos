@@ -8,6 +8,8 @@ import {
   extractToolArguments,
   fillArgumentsWithFastModel,
 } from './intent-router.js'
+import { enforceDemandResultConsistency } from './demand-result-guard.js'
+import { guardSearchDemandArguments } from './search-argument-guard.js'
 
 type PlaybookContext = {
   userId: string
@@ -131,11 +133,24 @@ export async function executeCapabilityPlaybook(
       }
       args = completed
     }
+    if (step.tool === 'search_demands') {
+      args = guardSearchDemandArguments(message, args)
+    }
 
     const batch = await processToolInvocations(
       [{ name: step.tool, arguments: args }],
       ctx,
     )
+    if (step.tool === 'search_demands' && batch.toolResults[0]) {
+      const guarded = enforceDemandResultConsistency(
+        args,
+        batch.toolResults[0],
+      ) as ToolResult
+      batch.toolResults[0] = guarded
+      if (batch.executed[0]) {
+        batch.executed[0] = { ...batch.executed[0], result: guarded }
+      }
+    }
     storedCalls.push(...batch.storedCalls)
     toolResults.push(...batch.toolResults)
     executed.push(...batch.executed)
@@ -155,4 +170,3 @@ export async function executeCapabilityPlaybook(
     persistedNarration: narration(storedCalls),
   }
 }
-

@@ -120,6 +120,19 @@ enum DemandStatus: Hashable {
     }
 
     var acceptsRequests: Bool { self == .active }
+
+    /// 灰态 CTA 旁展示，避免「不能点却不说原因」。
+    var requestBlockedReason: String? {
+        switch self {
+        case .active: nil
+        case .frozen: "需求已冻结，暂时无法申请"
+        case .inProgress: "需求履约中，无法再申请"
+        case .completed: "需求已完成"
+        case .withdrawn: "需求已撤回"
+        case .cancelled: "需求已取消"
+        case .unknown: "当前状态不可申请"
+        }
+    }
 }
 
 struct DemandApplicant: Identifiable, Hashable {

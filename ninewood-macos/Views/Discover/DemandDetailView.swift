@@ -558,9 +558,17 @@ struct DemandDetailView: View {
                     .disabled(model.isFavoriting)
                 }
 
-                Text("请求后需等待对方同意")
+                Text(
+                    displayDemand.status.acceptsRequests
+                        ? "请求后需等待对方同意"
+                        : (displayDemand.status.requestBlockedReason ?? "当前不可请求接单")
+                )
                     .font(.system(size: 11))
-                    .foregroundStyle(AppTheme.secondaryLabel)
+                    .foregroundStyle(
+                        displayDemand.status.acceptsRequests
+                            ? AppTheme.secondaryLabel
+                            : AppTheme.error.opacity(0.9)
+                    )
                     .frame(maxWidth: .infinity)
             } else if poolMode == .activePool {
                 Button {
@@ -581,9 +589,17 @@ struct DemandDetailView: View {
                 .buttonStyle(.plain)
                 .disabled(!displayDemand.status.acceptsRequests)
 
-                Text("提交报价与说明；应标为意向报价，需求方接受申请人后才会生成订单。")
+                Text(
+                    displayDemand.status.acceptsRequests
+                        ? "提交报价与说明；应标为意向报价，需求方接受申请人后才会生成订单。"
+                        : (displayDemand.status.requestBlockedReason ?? "当前不可应标")
+                )
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(
+                        displayDemand.status.acceptsRequests
+                            ? .secondary
+                            : AppTheme.error.opacity(0.9)
+                    )
                     .frame(maxWidth: .infinity)
             } else {
                 HStack(spacing: AppTheme.space16) {
@@ -610,9 +626,17 @@ struct DemandDetailView: View {
                     Spacer(minLength: 0)
                 }
 
-                Text("正式成单：请求接单 → 需求方接受。卡池应标只是意向报价，不会生成订单。")
+                Text(
+                    displayDemand.status.acceptsRequests
+                        ? "正式成单：请求接单 → 需求方接受。卡池应标只是意向报价，不会生成订单。"
+                        : (displayDemand.status.requestBlockedReason ?? "当前不可申请或应标")
+                )
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(
+                        displayDemand.status.acceptsRequests
+                            ? .secondary
+                            : AppTheme.error.opacity(0.9)
+                    )
                     .frame(maxWidth: .infinity)
             }
         }

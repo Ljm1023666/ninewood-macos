@@ -67,9 +67,6 @@ struct ProfileView: View {
             }
         }
 
-        /// 助手页需要更大对话区，进入时自动收纳「我的」导航。
-        var prefersCollapsedNav: Bool { self == .agent }
-
         static func destination(for path: String?) -> Self {
             guard let path else { return .overview }
             if path.hasPrefix("/orders/") { return .orders }
@@ -159,20 +156,18 @@ struct ProfileView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .transaction { $0.animation = nil }
                 .safeAreaInset(edge: .top, spacing: 0) {
-                    if !isNavExpanded && selection != .agent {
+                    if !isNavExpanded {
                         collapsedContextBar
                     }
                 }
         }
         .background(AppTheme.groupedBackground)
-        .navigationTitle(selection == .agent ? "九木助手" : "我的")
+        .navigationTitle("我的")
         .onAppear {
             applyNavigation(initialPath ?? session.navigation.currentPath)
             if isDesignPreview {
                 isNavExpanded = true
                 seedDesignPreviewOverview()
-            } else if selection.prefersCollapsedNav {
-                isNavExpanded = false
             }
         }
         .onChange(of: initialPath) { _, newPath in
@@ -185,18 +180,6 @@ struct ProfileView: View {
         .onChange(of: session.navigation.request) { _, request in
             guard let request else { return }
             applyNavigation(request.path)
-        }
-        .onChange(of: selection) { _, item in
-            // 仅助手页自动收起二级导航；离开时恢复展开。不做其它强制伸缩。
-            if item.prefersCollapsedNav, isNavExpanded {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isNavExpanded = false
-                }
-            } else if !item.prefersCollapsedNav, !isNavExpanded {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isNavExpanded = true
-                }
-            }
         }
         .task(id: selection) {
             guard selection == .overview, !isDesignPreview else { return }
@@ -218,14 +201,12 @@ struct ProfileView: View {
 
     private var collapsedNavRail: some View {
         VStack(spacing: 8) {
-            if selection != .agent {
-                NWPanelToggleButton(role: .profileMenu, isExpanded: false) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isNavExpanded = true
-                    }
+            NWPanelToggleButton(role: .profileMenu, isExpanded: false) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isNavExpanded = true
                 }
             }
-            ForEach([ProfileNav.agent, .orders, .myDemands, .settings]) { item in
+            ForEach([ProfileNav.orders, .myDemands, .settings]) { item in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         selection = item
@@ -243,17 +224,9 @@ struct ProfileView: View {
                 .buttonStyle(.plain)
                 .help(item.title)
             }
-            if selection == .agent {
-                Spacer(minLength: 8)
-                NWPanelToggleButton(role: .profileMenu, isExpanded: false) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isNavExpanded = true
-                    }
-                }
-            }
             Spacer(minLength: 0)
         }
-        .padding(.top, selection == .agent ? 12 : 10)
+        .padding(.top, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(AppTheme.workspaceBackground)
     }
@@ -279,9 +252,11 @@ struct ProfileView: View {
                 }
 
                 navSection("交易", [.orders, .myDemands, .myBids, .wallet])
-                navSection("服务与认证", [.serviceCards, .cert, .providers])
-                navSection("社交", [.follows, .favorites, .notifications, .loops, .welfare])
-                navSection("其他", [.agent, .settings])
+                // 认证中心 / 自然回在主侧栏一级入口，避免「我的」重复
+                navSection("服务", [.serviceCards, .providers])
+                navSection("社交", [.follows, .favorites, .notifications, .welfare])
+                // 九木助手已提升为主侧栏置顶入口，不再嵌在「我的」
+                navSection("其他", [.settings])
             }
             .padding(.horizontal, isDesignPreview ? 8 : 10)
             .padding(.vertical, isDesignPreview ? 14 : 12)
@@ -486,7 +461,7 @@ struct ProfileView: View {
                 systemImage: "arrow.triangle.2.circlepath",
                 tint: AppTheme.openStatus,
                 destination: nil,
-                externalPath: "/loops"
+                externalPath: "/loops/discover"
             )
         }
         .overviewPanel()
@@ -544,7 +519,8 @@ struct ProfileView: View {
                         time: item.time,
                         systemImage: item.symbol,
                         tint: item.tint,
-                        destination: profileNav(for: item.nav)
+                        destination: item.nav == "loops" ? nil : profileNav(for: item.nav),
+                        externalPath: item.nav == "loops" ? "/loops/discover" : nil
                     )
                 }
             } else {
@@ -559,11 +535,11 @@ struct ProfileView: View {
                 Divider().padding(.leading, 58)
                 overviewActivity(
                     "检查 Natural Loop",
-                    detail: "运行记录与资源回路",
+                    detail: "侧栏「自然回」· 运行记录与资源回路",
                     time: nil,
                     systemImage: "arrow.triangle.2.circlepath",
                     tint: AppTheme.openStatus,
-                    destination: .loops
+                    externalPath: "/loops/discover"
                 )
                 Divider().padding(.leading, 58)
                 overviewActivity(
@@ -594,10 +570,15 @@ struct ProfileView: View {
         time: String?,
         systemImage: String,
         tint: Color,
-        destination: ProfileNav
+        destination: ProfileNav? = nil,
+        externalPath: String? = nil
     ) -> some View {
         Button {
-            selection = destination
+            if let externalPath {
+                _ = session.navigation.navigate(to: externalPath)
+            } else if let destination {
+                selection = destination
+            }
         } label: {
             HStack(spacing: AppTheme.space16) {
                 Image(systemName: systemImage)
@@ -744,9 +725,8 @@ struct ProfileView: View {
                 previewCurrentUserID: useFixtures ? OrdersDesignPreviewFixtures.currentUserID : nil
             )
         case .loops:
-            NaturalLoopWorkspaceView(
-                previewCollection: useFixtures ? NaturalLoopDesignPreviewFixtures.collection : nil
-            )
+            LoopHubView(frontendPreview: useFixtures)
+                .accessibilityIdentifier("loop-workspace-hub")
         case .cert:
             CertCenterView(preview: useFixtures)
         case .myDemands:
@@ -776,6 +756,17 @@ struct ProfileView: View {
     }
 
     private func applyNavigation(_ path: String) {
+        // 认证 / 自然回 / 助手以主侧栏为准，避免「我的」内嵌重复页
+        if path == "/cert-center"
+            || path == "/loops"
+            || path.hasPrefix("/loops/")
+            || path == "/agent"
+            || path.hasPrefix("/agent/")
+        {
+            _ = session.navigation.navigate(to: path)
+            selection = .overview
+            return
+        }
         selection = ProfileNav.destination(for: path)
     }
 }

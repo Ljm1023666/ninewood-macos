@@ -37,6 +37,7 @@ final class LoopService {
         let earthItems = result.items.filter { $0.loopKind.uppercased() == "EARTH" }
         return LoopRecommendationResultDTO(
             query: result.query,
+            resolved: result.resolved,
             items: earthItems,
             humanFallback: earthItems.isEmpty ? result.humanFallback : nil
         )

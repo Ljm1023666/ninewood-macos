@@ -1,11 +1,12 @@
 import SwiftUI
 
 /// 主壳左侧导航，对齐 `docs/ui-renderings` 发现页侧栏：
-/// 主区 / 协作 / 账户；订单·钱包等嵌在「我的」二级导航，不平铺。
+/// 助手 / 主区 / 协作 / 账户；订单·钱包等嵌在「我的」二级导航，不平铺。
 ///
 /// - 01 登录 / 02 注册：未登录态
-/// - 侧栏一级：发现、卡池、发布、圈子、自然回、找人、消息、认证、帮助、我的
-/// - 嵌套于「我的」：订单、需求、应标、钱包、服务卡、通知、福利、助手、设置、关注、收藏、认证检索
+/// - 侧栏一级：九木助手（置顶）、发现、卡池、发布、圈子、回、找人、消息、认证、帮助、我的
+/// - 嵌套于「我的」：订单、需求、应标、钱包、服务卡、通知、福利、设置、关注、收藏、认证检索
+/// - 认证中心 / 回仅侧栏一级，不在「我的」重复列出
 /// - 25/26：订单内 Sheet，不进导航
 enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
     case discover          // 03
@@ -26,7 +27,8 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
     case serviceCards      // 16
     case notifications     // 17
     case welfare           // 18
-    case agent             // 19
+    /// 19 · 九木助手：主侧栏置顶「助手」区，不再嵌在「我的」
+    case agent
     case settings          // 20
     case myBids            // 22
     case follows           // 23
@@ -39,7 +41,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
     var nestsUnderProfile: Bool {
         switch self {
         case .orders, .myDemands, .myBids, .wallet, .serviceCards,
-             .notifications, .welfare, .agent, .settings,
+             .notifications, .welfare, .settings,
              .follows, .favorites, .providers:
             true
         default:
@@ -81,7 +83,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
         case .cardPool: "卡池"
         case .publish: "发布"
         case .circles: "圈子"
-        case .loops: "自然回"
+        case .loops: "回"
         case .searchPeople: "找人"
         case .messages: "消息"
         case .cert: "认证"
@@ -134,9 +136,9 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .discover: "/discover"
         case .cardPool: "/card-pool"
-        case .publish: "/demands/create"
+        case .publish: "/publish"
         case .circles: "/circles"
-        case .loops: "/loops"
+        case .loops: "/loops/discover"
         case .searchPeople: "/search"
         case .messages: "/messages"
         case .cert: "/cert-center"
@@ -158,33 +160,38 @@ enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
     }
 
     static func from(path: String) -> SidebarItem? {
+        // 回中心子路由统一归到侧栏「回」
+        if path == "/loops" || path.hasPrefix("/loops/") {
+            return .loops
+        }
         switch path {
-        case "/", "/discover": .discover
-        case "/demands/create": .publish
-        case "/messages", "/messages/group": .messages
-        case "/card-pool", "/card-pool/dead": .cardPool
-        case "/cert-center": .cert
-        case "/circles": .circles
-        case "/help": .help
-        case "/search": .searchPeople
-        case "/loops": .loops
-        case "/orders": .orders
-        case "/my-demands": .myDemands
-        case "/my-bids": .myBids
-        case "/transactions", "/wallet": .wallet
-        case "/service-cards": .serviceCards
-        case "/follows": .follows
-        case "/favorites": .favorites
-        case "/notifications": .notifications
-        case "/welfare": .welfare
-        case "/agent": .agent
-        case "/providers": .providers
-        case "/settings": .settings
-        case "/profile": .profile
-        default: nil
+        case "/", "/discover": return .discover
+        case "/publish", "/demands/create", "/service-cards/create": return .publish
+        case "/messages", "/messages/group": return .messages
+        case "/card-pool", "/card-pool/dead": return .cardPool
+        case "/cert-center": return .cert
+        case "/circles": return .circles
+        case "/help": return .help
+        case "/search": return .searchPeople
+        case "/orders": return .orders
+        case "/my-demands": return .myDemands
+        case "/my-bids": return .myBids
+        case "/transactions", "/wallet": return .wallet
+        case "/service-cards": return .serviceCards
+        case "/follows": return .follows
+        case "/favorites": return .favorites
+        case "/notifications": return .notifications
+        case "/welfare": return .welfare
+        case "/agent": return .agent
+        case "/providers": return .providers
+        case "/settings": return .settings
+        case "/profile": return .profile
+        default: return nil
         }
     }
 
+    /// 侧栏置顶 · 九木助手（产品级入口，不嵌在「我的」）
+    static let assistant: [SidebarItem] = [.agent]
     /// 渲染图侧栏 · 主区
     static let primary: [SidebarItem] = [.discover, .cardPool, .publish, .circles]
     /// 渲染图侧栏 · 协作（认证在账户区）
@@ -220,7 +227,8 @@ struct MainShellView: View {
         designPreviewCircles: [CircleDTO]? = nil,
         designPreviewLoopCollection: NaturalLoopRunCollection? = nil,
         initialSelection: SidebarItem = .discover,
-        profileInitialPath: String? = nil
+        profileInitialPath: String? = nil,
+        initialPath: String? = nil
     ) {
         self.designPreviewDemands = designPreviewDemands
         self.designPreviewThreads = designPreviewThreads
@@ -234,7 +242,11 @@ struct MainShellView: View {
         let resolved = Self.resolveEntry(initialSelection, profilePath: profileInitialPath)
         _selection = State(initialValue: resolved.selection)
         _activeProfilePath = State(initialValue: resolved.profilePath)
+        self.bootstrapPath = initialPath ?? resolved.selection.routePath
     }
+
+    /// 设计预览 / 深链入口：首帧同步到目标 path。
+    private let bootstrapPath: String
 
     /// 嵌套页入口统一落到「我的」+ 二级 path。
     private static func resolveEntry(
@@ -261,6 +273,12 @@ struct MainShellView: View {
                 )
         } detail: {
             detail(for: selection)
+                // 发布枢纽 / 回中心：selection 不变，靠 path 强制刷新
+                .id(
+                    selection == .publish || selection == .loops
+                        ? session.navigation.currentPath
+                        : selection.rawValue
+                )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // 切换一级页时禁用隐式动画，避免列宽/内容过渡抖动
                 .transaction { $0.animation = nil }
@@ -269,11 +287,20 @@ struct MainShellView: View {
         .tint(AppTheme.primary)
         // 不自定义侧栏按钮：macOS NavigationSplitView 已自带一枚，再加会三连重复
         .task {
+            if session.navigation.currentPath != bootstrapPath {
+                _ = session.navigation.navigate(to: bootstrapPath)
+            }
             await session.refreshUnread()
         }
         .onChange(of: session.navigation.request) { _, request in
             guard let request else { return }
             applyNavigation(request.path)
+        }
+        .onChange(of: session.navigation.currentPath) { _, path in
+            // 同壳层内 publish / loops 子页：即使 request 观察偶发漏掉，也强制同步 selection
+            if let item = SidebarItem.from(path: path), item == .publish || item == .loops {
+                selection = item
+            }
         }
         .sheet(item: $detailRoute) { route in
             NavigationStack {
@@ -295,6 +322,7 @@ struct MainShellView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: AppTheme.space16) {
+                    sidebarSection("助手", items: SidebarItem.assistant)
                     sidebarSection("主区", items: SidebarItem.primary)
                     sidebarSection("协作", items: SidebarItem.collab)
                     sidebarSection("账户", items: SidebarItem.account)
@@ -361,6 +389,8 @@ struct MainShellView: View {
                 activeProfilePath = "/profile"
             }
             selection = item
+            // 同步壳层路径，使「发布」枢纽 / 子工作区能按 currentPath 切换
+            _ = session.navigation.navigate(to: item.routePath)
         } label: {
             HStack(spacing: AppTheme.space12) {
                 Image(systemName: item.systemImage)
@@ -426,13 +456,10 @@ struct MainShellView: View {
                     DiscoverView(repository: session.demandRepository)
                 }
             case .publish:
-                CreateDemandView(embedded: true, frontendPreview: isDesignPreviewMode)
+                publishWorkspace
             case .loops:
-                NaturalLoopWorkspaceView(
-                    previewCollection: isDesignPreviewMode
-                        ? (designPreviewLoopCollection ?? NaturalLoopDesignPreviewFixtures.collection)
-                        : designPreviewLoopCollection
-                )
+                LoopHubView(frontendPreview: isDesignPreviewMode)
+                    .accessibilityIdentifier("loop-workspace-hub")
             case .messages:
                 MessagesView(
                     repository: session.messageRepository,
@@ -469,11 +496,32 @@ struct MainShellView: View {
                     previewUsers: designPreviewUsers
                         ?? (isDesignPreviewMode ? AccountDesignPreviewFixtures.users : nil)
                 )
+            case .agent:
+                AgentChatView(
+                    previewDetails: isDesignPreviewMode ? AgentDesignPreviewFixtures.details : nil
+                )
             case .orders, .myDemands, .myBids, .wallet, .serviceCards,
-                 .follows, .favorites, .notifications, .welfare, .agent,
+                 .follows, .favorites, .notifications, .welfare,
                  .settings, .providers:
                 profileDetail(path: activeProfilePath ?? item.routePath)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var publishWorkspace: some View {
+        // 显式读 currentPath，确保 Observable 订阅到导航变化
+        let path = session.navigation.currentPath
+        switch path {
+        case "/demands/create":
+            PublishCardWorkspaceView(mode: .demand, frontendPreview: isDesignPreviewMode)
+                .accessibilityIdentifier("publish-workspace-demand")
+        case "/service-cards/create":
+            PublishCardWorkspaceView(mode: .service, frontendPreview: isDesignPreviewMode)
+                .accessibilityIdentifier("publish-workspace-service")
+        default:
+            PublishHubView(frontendPreview: isDesignPreviewMode)
+                .accessibilityIdentifier("publish-workspace-hub")
         }
     }
 

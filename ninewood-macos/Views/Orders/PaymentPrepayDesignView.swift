@@ -300,18 +300,10 @@ struct PaymentPrepayModal: View {
                 Image(systemName: model.agreedChecked ? "checkmark.square.fill" : "square")
                     .font(.system(size: 15))
                     .foregroundStyle(model.agreedChecked ? AppTheme.primary : Color(red: 0.70, green: 0.72, blue: 0.75))
-                (
-                    Text("我已阅读并同意")
-                        .foregroundStyle(AppTheme.onSurface)
-                    + Text("《Ninewood 服务协议》")
-                        .foregroundStyle(AppTheme.primary)
-                    + Text("与")
-                        .foregroundStyle(AppTheme.onSurface)
-                    + Text("《服务费规则》")
-                        .foregroundStyle(AppTheme.primary)
-                )
-                .font(.system(size: 12))
-                .multilineTextAlignment(.leading)
+                Text("我已阅读并同意\(Text("《Ninewood 服务协议》").foregroundStyle(AppTheme.primary))与\(Text("《服务费规则》").foregroundStyle(AppTheme.primary))")
+                    .foregroundStyle(AppTheme.onSurface)
+                    .font(.system(size: 12))
+                    .multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
             }
         }

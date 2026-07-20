@@ -293,7 +293,7 @@ enum HelpFAQ {
             question: "「回」是什么？",
             intro: "「回」是九木的自然回路能力：用人可提交的输入，调用接口直接拿回结果。",
             steps: [
-                Step(title: "入口", content: "侧栏「回」或发现页「可用地回」。"),
+                Step(title: "入口", content: "侧栏「回」：发现回寻找地回，我的回查看运行记录。"),
                 Step(title: "运行", content: "选择回路并提交输入即可查看结果。"),
             ]
         ),

@@ -532,16 +532,10 @@ private struct CircleReferenceDetail: View {
     private var overviewContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader("公告", "megaphone.fill")
-            (
-                Text("欢迎新成员！请先阅读")
-                    .foregroundStyle(.primary.opacity(0.85))
-                + Text("《圈子公约》")
-                    .foregroundStyle(AppTheme.primary)
-                + Text("，一起保持高质量的交流。")
-                    .foregroundStyle(.primary.opacity(0.85))
-            )
-            .font(.body)
-            .lineSpacing(4)
+            Text("欢迎新成员！请先阅读\(Text("《圈子公约》").foregroundStyle(AppTheme.primary))，一起保持高质量的交流。")
+                .foregroundStyle(.primary.opacity(0.85))
+                .font(.body)
+                .lineSpacing(4)
             Text("2026-07-12")
                 .font(.caption)
                 .foregroundStyle(.tertiary)

@@ -37,6 +37,17 @@ struct CreateDemandView: View {
         draft.hasRequiredContent && !isPublishing
     }
 
+    private var step1Complete: Bool {
+        !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !draft.expectedOutcome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var step2Complete: Bool {
+        !draft.allowsNearbyDiscovery || draft.selectedRegionID != nil
+    }
+
+    private var step3Ready: Bool { draft.hasRequiredContent }
+
     private var titleValid: Bool {
         let count = draft.title.trimmingCharacters(in: .whitespacesAndNewlines).count
         return count >= 5 && count <= 60
@@ -53,20 +64,46 @@ struct CreateDemandView: View {
     }
 
     var body: some View {
-        DocumentShell(maxWidth: 1180) {
+        DocumentShell(maxWidth: 1280) {
             VStack(alignment: .leading, spacing: AppTheme.space16) {
                 pageHeader
                 publishSteps
 
                 ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: AppTheme.space24) {
+                    HStack(alignment: .top, spacing: AppTheme.space16) {
+                        PublishAIOrganizePanel(
+                            mode: .demand,
+                            frontendPreview: frontendPreview
+                        ) { result in
+                            PublishDraftAIMapper.apply(
+                                result,
+                                to: &draft,
+                                detailedDescription: &detailedDescription
+                            )
+                        }
+                        .frame(width: 320)
+                        .frame(minHeight: 420)
+
                         publishForm
                             .frame(maxWidth: .infinity)
                         publishPreview
-                            .frame(width: 284)
+                            .frame(width: 260)
                     }
 
-                    publishForm
+                    VStack(alignment: .leading, spacing: AppTheme.space16) {
+                        PublishAIOrganizePanel(
+                            mode: .demand,
+                            frontendPreview: frontendPreview
+                        ) { result in
+                            PublishDraftAIMapper.apply(
+                                result,
+                                to: &draft,
+                                detailedDescription: &detailedDescription
+                            )
+                        }
+                        .frame(minHeight: 280)
+                        publishForm
+                    }
                 }
             }
         }
@@ -80,6 +117,7 @@ struct CreateDemandView: View {
         }
         .onAppear {
             draft.applyInitialContent(title: initialTitle, expectedOutcome: initialOutcome)
+            consumePublishHandoff()
         }
         .task {
             if frontendPreview {
@@ -103,11 +141,29 @@ struct CreateDemandView: View {
     private var pageHeader: some View {
         HStack(alignment: .center) {
             if embedded {
-                Text("发布需求")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(AppTheme.onSurface)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 10) {
+                        Button {
+                            _ = session.navigation.navigate(to: "/publish")
+                        } label: {
+                            Label("发布工作台", systemImage: "chevron.left")
+                        }
+                        .buttonStyle(.borderless)
+                        Text("需求卡工作区")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(AppTheme.onSurface)
+                    }
+                    Text("左侧用 AI 整理字段，右侧核对后发布。助手不会静默提交。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
+            if publishSuccess {
+                Label("已发布", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(AppTheme.openStatus)
+                    .font(.subheadline.weight(.semibold))
+            }
             Button("保存草稿") {
                 Task { await saveDraft() }
             }
@@ -117,17 +173,53 @@ struct CreateDemandView: View {
         }
     }
 
+    private func consumePublishHandoff() {
+        guard let handoff = session.consumePublishHandoff(), handoff.kind == .demand else { return }
+        draft.applyInitialContent(
+            title: handoff.title,
+            expectedOutcome: handoff.expectedOutcome.isEmpty ? handoff.description : handoff.expectedOutcome
+        )
+        if detailedDescription.isEmpty, !handoff.description.isEmpty {
+            detailedDescription = handoff.description
+        }
+        if draft.minimumPriceText == "200" || draft.minimumPriceText.isEmpty,
+           !handoff.budgetMin.isEmpty {
+            draft.minimumPriceText = handoff.budgetMin
+        }
+        if draft.expectedPriceText.isEmpty, !handoff.budgetMax.isEmpty {
+            draft.expectedPriceText = handoff.budgetMax
+        }
+        if !handoff.serviceType.isEmpty {
+            draft.allowsNearbyDiscovery = handoff.serviceType.uppercased() != "ONLINE"
+        }
+        if !handoff.category.isEmpty {
+            draft.selectedTags.insert(handoff.category)
+        }
+    }
+
     private var publishSteps: some View {
         HStack(spacing: AppTheme.space12) {
-            stepBadge(1, title: "需求信息", active: true)
+            stepBadge(1, title: "需求信息", state: step1Complete ? .done : .current)
             stepConnector
-            stepBadge(2, title: "服务范围", active: false)
+            stepBadge(
+                2,
+                title: "服务范围",
+                state: step2Complete ? .done : (step1Complete ? .current : .upcoming)
+            )
             stepConnector
-            stepBadge(3, title: "确认托管", active: false)
+            stepBadge(
+                3,
+                title: "确认托管",
+                state: step3Ready ? .done : (step1Complete && step2Complete ? .current : .upcoming)
+            )
             Spacer()
         }
         .padding(.horizontal, 2)
         .padding(.bottom, 2)
+    }
+
+    private enum PublishStepState {
+        case upcoming, current, done
     }
 
     private var stepConnector: some View {
@@ -136,20 +228,31 @@ struct CreateDemandView: View {
             .foregroundStyle(AppTheme.secondaryLabel)
     }
 
-    private func stepBadge(_ number: Int, title: String, active: Bool) -> some View {
-        HStack(spacing: 8) {
-            Text("\(number)")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(active ? .white : AppTheme.secondaryLabel)
-                .frame(width: 22, height: 22)
-                .background(active ? AppTheme.primary : Color(red: 0.94, green: 0.95, blue: 0.96), in: Circle())
-                .overlay {
-                    if !active {
-                        Circle().strokeBorder(AppTheme.outlineVariant, lineWidth: 1)
-                    }
+    private func stepBadge(_ number: Int, title: String, state: PublishStepState) -> some View {
+        let active = state == .current || state == .done
+        return HStack(spacing: 8) {
+            ZStack {
+                Text(state == .done ? "" : "\(number)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(active ? .white : AppTheme.secondaryLabel)
+                if state == .done {
+                    Image(systemName: "checkmark")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
                 }
+            }
+            .frame(width: 22, height: 22)
+            .background(
+                state == .done || state == .current ? AppTheme.primary : Color(red: 0.94, green: 0.95, blue: 0.96),
+                in: Circle()
+            )
+            .overlay {
+                if state == .upcoming {
+                    Circle().strokeBorder(AppTheme.outlineVariant, lineWidth: 1)
+                }
+            }
             Text(title)
-                .font(.subheadline.weight(active ? .semibold : .regular))
+                .font(.subheadline.weight(state == .current ? .semibold : .regular))
                 .foregroundStyle(active ? AppTheme.onSurface : .secondary)
         }
     }
@@ -221,7 +324,7 @@ struct CreateDemandView: View {
             }
 
             HStack(alignment: .top, spacing: 16) {
-                compactField("服务人数", required: true) {
+                compactField("申请人数上限", required: true) {
                     peopleStepper
                 }
                 .frame(maxWidth: 168)

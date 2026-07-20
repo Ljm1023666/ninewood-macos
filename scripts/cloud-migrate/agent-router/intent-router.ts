@@ -7,6 +7,10 @@ import {
   type MatchedCapability,
 } from './capability-matcher.js'
 import { fidelityFor, type DataFidelityDomain } from './data-fidelity.js'
+import {
+  demandDraftArguments,
+  type DemandDraft,
+} from './demand-draft.js'
 
 export type RouteKind = 'mechanical' | 'analytical' | 'fallback'
 
@@ -94,7 +98,7 @@ function cleanSearchKeyword(message: string, kind: 'demand' | 'user'): string {
     .replace(/并打开(?:第一个|第一条|首个)?/g, '')
   if (kind === 'demand') {
     value = value.replace(
-      /分析|评估|搜索|搜|查找|找|相关的?|需求|有没有|有哪些|有什么/g,
+      /分析|评估|搜索|搜|查找|找|相关的?|需求|有没有|有哪些|有什么|最新|最近|热门/g,
       '',
     )
   } else {
@@ -206,6 +210,23 @@ export function routeIntent(
   message: string,
   context?: Record<string, unknown>,
 ): IntentRoute {
+  const demandDraft = context?.demandDraft as DemandDraft | undefined
+  if (
+    demandDraft?.active &&
+    !/(?:搜索|搜|找).*(?:需求|单子)/.test(message)
+  ) {
+    const capability = getCapabilityById('create_demand')
+    return {
+      kind: 'fallback',
+      capability,
+      confidence: demandDraft.ready ? 1 : 0.85,
+      reason: demandDraft.ready
+        ? 'continue-demand-draft-ready'
+        : 'continue-demand-draft-missing-fields',
+      arguments: demandDraftArguments(demandDraft),
+      fidelity: fidelityFor(capability?.id, message),
+    }
+  }
   const matches = matchCapabilities(message)
   // 容忍「搜一下上海有哪些需求」这类在动词和对象间插入条件的自然表达。
   if (

@@ -1,5 +1,11 @@
 import Foundation
 
+private struct AgentSSEServerError: LocalizedError {
+    let message: String
+
+    var errorDescription: String? { message }
+}
+
 // MARK: - DTOs
 
 struct AgentConversationDTO: Decodable, Identifiable, Hashable {
@@ -135,6 +141,11 @@ struct AgentApproveToolResponseDTO: Decodable {
     let approved: Bool?
     let message: String?
     let error: String?
+    let data: AgentApproveToolDataDTO?
+}
+
+struct AgentApproveToolDataDTO: Decodable {
+    let path: String?
 }
 
 // MARK: - Service
@@ -194,14 +205,16 @@ final class AgentService {
     }
 
     /// Streams assistant reply via SSE. Returns a cancellable task.
+    /// - Parameter model: Optional Ollama / provider model name; when set, cloud `executeAgent` uses it instead of default `AI_MODEL`.
     @discardableResult
     func streamReply(
         conversationId: String,
         message: String,
         thinkMode: Bool? = nil,
-        onEvent: @escaping @Sendable (String, String) -> Void,
-        onDone: @escaping @Sendable () -> Void,
-        onError: @escaping @Sendable (Error) -> Void
+        model: String? = nil,
+        onEvent: @escaping @MainActor @Sendable (String, String) -> Void,
+        onDone: @escaping @MainActor @Sendable () -> Void,
+        onError: @escaping @MainActor @Sendable (Error) -> Void
     ) -> Task<Void, Never> {
         let token = client.authToken
         return Task {
@@ -228,13 +241,28 @@ final class AgentService {
                     let message: String
                     let thinkMode: Bool
                     let accessMode: String
+                    let model: String?
+
+                    func encode(to encoder: Encoder) throws {
+                        var c = encoder.container(keyedBy: CodingKeys.self)
+                        try c.encode(message, forKey: .message)
+                        try c.encode(thinkMode, forKey: .thinkMode)
+                        try c.encode(accessMode, forKey: .accessMode)
+                        try c.encodeIfPresent(model, forKey: .model)
+                    }
+
+                    private enum CodingKeys: String, CodingKey {
+                        case message, thinkMode, accessMode, model
+                    }
                 }
                 let encoder = JSONEncoder()
+                let trimmedModel = model?.trimmingCharacters(in: .whitespacesAndNewlines)
                 request.httpBody = try encoder.encode(
                     StreamBody(
                         message: message,
                         thinkMode: thinkMode ?? true,
-                        accessMode: "approval"
+                        accessMode: "approval",
+                        model: (trimmedModel?.isEmpty == false) ? trimmedModel : nil
                     )
                 )
 
@@ -273,12 +301,30 @@ final class AgentService {
                 var currentEvent = "message"
                 var dataLines: [String] = []
 
+                @MainActor
+                func deliverEvent(_ event: String, data: String) throws {
+                    let normalized = event.lowercased().replacingOccurrences(of: "-", with: "_")
+                    guard normalized == "error" else {
+                        onEvent(event, data)
+                        return
+                    }
+
+                    var message = data
+                    if let jsonData = data.data(using: .utf8),
+                       let object = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                       let serverMessage = object["message"] as? String,
+                       !serverMessage.isEmpty {
+                        message = serverMessage
+                    }
+                    throw AgentSSEServerError(message: message.isEmpty ? "Agent stream failed" : message)
+                }
+
                 for try await line in bytes.lines {
                     if Task.isCancelled { return }
 
                     if line.isEmpty {
                         if !dataLines.isEmpty {
-                            onEvent(currentEvent, dataLines.joined(separator: "\n"))
+                            try deliverEvent(currentEvent, data: dataLines.joined(separator: "\n"))
                             dataLines.removeAll()
                         }
                         currentEvent = "message"
@@ -295,7 +341,7 @@ final class AgentService {
                 }
 
                 if !dataLines.isEmpty {
-                    onEvent(currentEvent, dataLines.joined(separator: "\n"))
+                    try deliverEvent(currentEvent, data: dataLines.joined(separator: "\n"))
                 }
                 if !Task.isCancelled {
                     onDone()

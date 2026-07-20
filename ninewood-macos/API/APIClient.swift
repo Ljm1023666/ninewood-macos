@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-protocol APITokenStore {
+nonisolated protocol APITokenStore {
     func load() -> String?
     func save(_ token: String)
     func delete()
@@ -24,13 +24,15 @@ final class APIClient {
 
     init(
         session: URLSession = .shared,
-        tokenStore: any APITokenStore = KeychainTokenStore()
+        tokenStore: (any APITokenStore)? = nil
     ) {
+        // 默认参数在 nonisolated 求值；模块默认 MainActor 隔离时不能在此直接 KeychainTokenStore()
+        let resolvedStore = tokenStore ?? KeychainTokenStore()
         self.session = session
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
-        self.tokenStore = tokenStore
-        self.authToken = tokenStore.load()
+        self.tokenStore = resolvedStore
+        self.authToken = resolvedStore.load()
     }
 
     func setAuthToken(_ token: String?) {

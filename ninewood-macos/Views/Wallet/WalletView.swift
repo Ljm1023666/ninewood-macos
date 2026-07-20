@@ -60,8 +60,8 @@ struct WalletView: View {
         .task { await load(reset: true) }
         .sheet(isPresented: $showRecharge) {
             WalletAmountSheet(
-                title: "模拟充值",
-                subtitle: "当前为模拟充值，到账后可在流水中查看。",
+                title: "充值点数",
+                subtitle: "内测环境使用平台点数（1 点 = 1 元）。到账后可在流水中查看。",
                 confirmTitle: "确认充值"
             ) { amount in
                 Task { await recharge(amount) }
@@ -70,8 +70,8 @@ struct WalletView: View {
         }
         .sheet(isPresented: $showWithdraw) {
             WalletAmountSheet(
-                title: "模拟提现",
-                subtitle: "当前为模拟提现，将从可用余额扣减。",
+                title: "提现点数",
+                subtitle: "内测环境将从可用余额扣减对应点数。",
                 confirmTitle: "确认提现"
             ) { amount in
                 Task { await withdraw(amount) }
@@ -268,7 +268,7 @@ struct WalletView: View {
                         .disabled(isPreview)
                 }
                 .frame(maxWidth: .infinity)
-                Text("当前为模拟充值/提现，仅用于联调验证。")
+                Text("当前为内测点数账户。正式支付通道上线前，充值/提现仅变动账户点数。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

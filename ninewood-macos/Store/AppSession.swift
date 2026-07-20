@@ -15,7 +15,12 @@ final class AppNavigationState {
 
     @discardableResult
     func navigate(to rawPath: String) -> Bool {
-        let path = normalized(alias(normalized(rawPath)))
+        var raw = rawPath
+        // Windows 曾用 /demands/create?mode=service；macOS 正式拆到独立服务卡页
+        if raw.contains("mode=service") {
+            raw = "/service-cards/create"
+        }
+        let path = normalized(alias(normalized(raw)))
         guard Self.supports(path) else { return false }
         currentPath = path
         request = AppNavigationRequest(path: path)
@@ -26,6 +31,7 @@ final class AppNavigationState {
     private func alias(_ path: String) -> String {
         switch path {
         case "/wallet": return "/transactions"
+        case "/loops": return "/loops/discover"
         default: return path
         }
     }
@@ -50,11 +56,13 @@ final class AppNavigationState {
 
     private static func supports(_ path: String) -> Bool {
         let staticPaths: Set<String> = [
-            "/", "/discover", "/demands/create", "/my-demands", "/orders",
+            "/", "/discover", "/publish", "/demands/create", "/my-demands", "/orders",
             "/settings", "/help", "/messages", "/card-pool", "/card-pool/dead",
             "/cert-center", "/circles", "/welfare", "/search", "/profile",
             "/agent", "/transactions", "/wallet", "/my-bids", "/service-cards",
+            "/service-cards/create",
             "/notifications", "/follows", "/favorites", "/loops",
+            "/loops/discover", "/loops/mine", "/loops/accept",
             "/providers", "/messages/group"
         ]
         if staticPaths.contains(path) { return true }
@@ -65,6 +73,16 @@ final class AppNavigationState {
             return true
         }
         if path.hasPrefix("/orders/"), path.split(separator: "/").count == 2 { return true }
+        if path.hasPrefix("/service-cards/"), path.split(separator: "/").count == 2 {
+            let id = path.split(separator: "/").last.map(String.init) ?? ""
+            if ["create", "mine", "search"].contains(id) { return false }
+            return true
+        }
+        // 回中心：/loops/offerings/:id · /loops/runs/:id
+        let parts = path.split(separator: "/").map(String.init)
+        if parts.count == 3, parts[0] == "loops", ["offerings", "runs"].contains(parts[1]), !parts[2].isEmpty {
+            return true
+        }
         return false
     }
 }
@@ -78,6 +96,9 @@ final class AppSession {
     let authSession: AuthSession
     let inbox: InboxState
     let navigation = AppNavigationState()
+
+    /// Work 助手生成的发布草稿；专用页面 onAppear 消费。
+    private(set) var pendingPublishHandoff: PublishDraftHandoff?
 
     var state: SessionState { authSession.state }
     var phone: String { authSession.phone }
@@ -177,5 +198,22 @@ final class AppSession {
 
     func retryBootstrap() async {
         await authSession.bootstrap()
+    }
+
+    func setPublishHandoff(_ handoff: PublishDraftHandoff) {
+        pendingPublishHandoff = handoff
+    }
+
+    @discardableResult
+    func consumePublishHandoff() -> PublishDraftHandoff? {
+        defer { pendingPublishHandoff = nil }
+        return pendingPublishHandoff
+    }
+
+    /// 助手只交接草稿并跳转专用页；不在此提交。
+    @discardableResult
+    func handoffPublishDraft(_ handoff: PublishDraftHandoff) -> Bool {
+        setPublishHandoff(handoff)
+        return navigation.navigate(to: handoff.targetPath)
     }
 }
