@@ -257,7 +257,9 @@ struct NotificationsView: View {
         defer { isLoading = false }
         do {
             let page = try await session.messageService.notifications()
-            let mapped = page.rows.map(mapNotification)
+            let mapped = page.rows
+                .filter { NotificationInboxPreferences.isEnabled(forNotificationType: $0.type) }
+                .map(mapNotification)
             items = mapped
             if let selected = mapped.first(where: { $0.id == selectedID }) {
                 selectedID = selected.id
@@ -1807,10 +1809,15 @@ struct SettingsView: View {
     @State private var tagDraft = ""
     @State private var blockTags = ""
     @State private var blockKeywords = ""
-    @State private var receivePushes = true
-    @State private var pushFrequency = "NORMAL"
+    @State private var receivePushes = false
+    @State private var pushFrequency = "OFF"
     @State private var excludeKeywords = ""
     @State private var excludeTags = ""
+    @State private var excludeRegionIDs: Set<Int> = []
+    @State private var availableRegions: [RegionDTO] = []
+    @State private var inboxCategoryEnabled: [NotificationInboxCategory: Bool] = Dictionary(
+        uniqueKeysWithValues: NotificationInboxCategory.allCases.map { ($0, true) }
+    )
     @State private var avatarItem: PhotosPickerItem?
     @State private var coverItem: PhotosPickerItem?
     @State private var pendingAvatar: MultipartFile?
@@ -2029,6 +2036,26 @@ struct SettingsView: View {
 
                 Divider()
 
+                settingsField("站内通知") {
+                    VStack(alignment: .leading, spacing: AppTheme.space8) {
+                        Text("控制通知列表里展示哪些类别。关闭后仍可能由服务端写入，但不会出现在本机收件箱。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        ForEach(NotificationInboxCategory.allCases) { category in
+                            Toggle(category.title, isOn: Binding(
+                                get: { inboxCategoryEnabled[category] ?? true },
+                                set: { newValue in
+                                    inboxCategoryEnabled[category] = newValue
+                                    NotificationInboxPreferences.setEnabled(category, newValue)
+                                }
+                            ))
+                            .toggleStyle(.switch)
+                        }
+                    }
+                }
+
+                Divider()
+
                 settingsField("需求推送") {
                     if isDesignPreview {
                         VStack(alignment: .leading, spacing: 10) {
@@ -2054,13 +2081,46 @@ struct SettingsView: View {
                             .onChange(of: pushFrequency) { _, _ in
                                 Task { await savePushPreferences() }
                             }
-                            Text("控制站内匹配需求推送的接收与频率。")
+                            Text("匹配需求推送默认关闭；开启后由你决定频率与排除条件。")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             TextField("排除关键词（逗号分隔）", text: $excludeKeywords)
                                 .textFieldStyle(.roundedBorder)
                             TextField("排除标签（逗号分隔）", text: $excludeTags)
                                 .textFieldStyle(.roundedBorder)
+                            if !availableRegions.isEmpty {
+                                Text("排除地区")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                LazyVGrid(
+                                    columns: [GridItem(.adaptive(minimum: 88), spacing: 6)],
+                                    alignment: .leading,
+                                    spacing: 6
+                                ) {
+                                    ForEach(availableRegions) { region in
+                                        let selected = excludeRegionIDs.contains(region.id)
+                                        Button {
+                                            if selected {
+                                                excludeRegionIDs.remove(region.id)
+                                            } else {
+                                                excludeRegionIDs.insert(region.id)
+                                            }
+                                            Task { await savePushPreferences() }
+                                        } label: {
+                                            Text(region.name ?? "地区 \(region.id)")
+                                                .font(.caption)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(
+                                                    selected ? AppTheme.softPrimary : AppTheme.fill,
+                                                    in: Capsule()
+                                                )
+                                                .foregroundStyle(selected ? AppTheme.primary : AppTheme.onSurface)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -2240,13 +2300,20 @@ struct SettingsView: View {
         }
         do {
             let pref = try await session.userService.fetchPushPreferences()
-            receivePushes = pref.receivePushes ?? true
-            pushFrequency = pref.pushFrequency ?? "NORMAL"
+            receivePushes = pref.receivePushes ?? false
+            pushFrequency = pref.pushFrequency ?? (receivePushes ? "NORMAL" : "OFF")
             excludeKeywords = (pref.excludeKeywords ?? []).joined(separator: ",")
             excludeTags = (pref.excludeTags ?? []).joined(separator: ",")
+            excludeRegionIDs = Set(pref.excludeRegions ?? [])
         } catch {
             message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+        availableRegions = (try? await session.regionService.children()) ?? []
+        inboxCategoryEnabled = Dictionary(
+            uniqueKeysWithValues: NotificationInboxCategory.allCases.map {
+                ($0, NotificationInboxPreferences.isEnabled($0))
+            }
+        )
     }
 
     private func saveProfile() async {
@@ -2320,7 +2387,8 @@ struct SettingsView: View {
                 receivePushes: receivePushes,
                 pushFrequency: receivePushes ? pushFrequency : "OFF",
                 excludeKeywords: keywords,
-                excludeTags: tags
+                excludeTags: tags,
+                excludeRegions: Array(excludeRegionIDs).sorted()
             )
             message = "推送偏好已保存"
         } catch {

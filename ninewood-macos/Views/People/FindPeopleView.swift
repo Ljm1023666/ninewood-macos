@@ -287,29 +287,9 @@ private struct FindPeopleReferencePreview: View {
         loadError = nil
         defer { isLoading = false }
         do {
-            // providers 带 avgRating；种子 UUID 置顶，缺的再 get 补齐
-            var byID: [String: SoftUserDTO] = [:]
+            // 按服务端返回顺序展示，不做种子账号硬置顶（产品原则：曝光不可人为加权）。
             let providers = try await session.certificationService.providers(page: 1)
-            for row in providers { byID[row.id] = row }
-
-            let seedIDs = FindPeopleDesignFixtures.previewUserIDs + [
-                "00000008-0009-4000-8000-000000000009", // 陈述
-            ]
-            for id in seedIDs where byID[id] == nil {
-                if let dto = try? await session.userService.get(id: id) {
-                    byID[id] = dto
-                }
-            }
-
-            var ordered: [SoftUserDTO] = []
-            for id in seedIDs {
-                if let row = byID.removeValue(forKey: id) { ordered.append(row) }
-            }
-            for row in providers {
-                if let kept = byID.removeValue(forKey: row.id) { ordered.append(kept) }
-            }
-            ordered.append(contentsOf: byID.values)
-            await applyPeople(FindPeopleDesignFixtures.mergeLiveHonest(ordered))
+            await applyPeople(FindPeopleDesignFixtures.mergeLiveHonest(providers))
         } catch {
             loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }

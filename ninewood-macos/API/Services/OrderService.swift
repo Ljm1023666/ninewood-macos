@@ -151,6 +151,7 @@ enum OrderMapper {
             escrowAmount: escrow ?? 0,
             remainingPay: remaining ?? 0,
             serviceFee: fee ?? 0,
+            serviceFeeRate: dto.serviceFeeRate.map { Decimal($0) },
             amountHint: hint,
             amountsFromServer: amountsFromServer
         )

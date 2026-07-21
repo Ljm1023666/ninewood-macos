@@ -62,7 +62,8 @@ struct CardPoolView: View {
                                 )
                             }
                         }
-                        .nwStableDetailIdentity(selectedDemand.id)
+                        // 不按 id remount：DemandDetailView 就地换快照，避免切换抖动。
+                        .transaction { $0.animation = nil }
                     } else {
                         NWDetailPlaceholder(
                             title: "选择需求",
@@ -287,7 +288,7 @@ struct CardPoolView: View {
             Text("需求标题").frame(maxWidth: .infinity, alignment: .leading)
             Text("奖励(点)").frame(width: 72, alignment: .leading)
             Text("模式").frame(width: 48, alignment: .leading)
-            Text("剩余可见").frame(width: 72, alignment: .leading)
+            Text("预计失效").frame(width: 72, alignment: .leading)
             Text("应标").frame(width: 36, alignment: .trailing)
             Text("认证").frame(width: 48, alignment: .trailing)
         }
@@ -438,7 +439,11 @@ struct CardPoolView: View {
         case "预算最高":
             items.sort { ($0.expectedPrice ?? $0.minPrice) > ($1.expectedPrice ?? $1.minPrice) }
         case "即将截止":
-            items.sort { $0.countdownText < $1.countdownText }
+            items.sort {
+                let lhs = $0.visibleUntil ?? .distantFuture
+                let rhs = $1.visibleUntil ?? .distantFuture
+                return lhs < rhs
+            }
         default:
             break
         }
@@ -640,7 +645,7 @@ private struct CardPoolReferenceDetail: View {
                     HStack(alignment: .top, spacing: 0) {
                         stat("预算范围", rewardLabel, AppTheme.primary)
                         stat("服务模式", demand.applicantLimit <= 1 ? "一对一" : "一对多")
-                        stat("剩余可见", demand.countdownText)
+                        stat("预计失效", demand.countdownText)
                     }
                     sectionDivider()
 

@@ -449,16 +449,25 @@ enum DemandMapper {
 
     private static func countdownText(from iso: String?) -> String {
         guard let deadline = APIDate.parse(iso) else { return "—" }
-        let remaining = max(0, Int(deadline.timeIntervalSinceNow))
-        if remaining <= 0 { return "已截止" }
-        let hours = remaining / 3600
-        let minutes = (remaining % 3600) / 60
-        if hours > 0 { return "剩余 \(hours)h \(minutes)m" }
-        return "剩余 \(minutes)m"
+        let remaining = deadline.timeIntervalSinceNow
+        if remaining <= 0 { return "已失效" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        if Calendar.current.isDateInToday(deadline) {
+            formatter.dateFormat = "HH:mm"
+            return "预计失效于 \(formatter.string(from: deadline))"
+        }
+        if Calendar.current.isDateInTomorrow(deadline) {
+            formatter.dateFormat = "HH:mm"
+            return "预计失效于 明日 \(formatter.string(from: deadline))"
+        }
+        formatter.dateFormat = "M月d日 HH:mm"
+        return "预计失效于 \(formatter.string(from: deadline))"
     }
 
     private static func state(applicantCount: Int, applicantLimit: Int, deadlineAt: String?) -> Demand.State {
         if applicantCount >= applicantLimit { return .full }
+        // `.urgent` 仅作业务态标记，不强制驱动红色紧迫感视觉。
         if let deadline = APIDate.parse(deadlineAt), deadline.timeIntervalSinceNow < 3600 {
             return .urgent
         }

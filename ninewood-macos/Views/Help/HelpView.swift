@@ -61,9 +61,9 @@ struct HelpView: View {
                                 .foregroundStyle(.secondary)
                             if !selectedEntry.steps.isEmpty {
                                 VStack(alignment: .leading, spacing: 12) {
-                                    Text("结算全流程（四步）")
+                                    Text("详细说明")
                                         .font(.headline)
-                                    ForEach(Array(selectedEntry.steps.prefix(4).enumerated()), id: \.offset) { index, step in
+                                    ForEach(Array(selectedEntry.steps.enumerated()), id: \.offset) { index, step in
                                         HStack(alignment: .top, spacing: 12) {
                                             Text("\(index + 1)")
                                                 .font(.caption.weight(.bold))
@@ -115,12 +115,24 @@ struct HelpView: View {
         .background(AppTheme.groupedBackground)
         .navigationTitle("帮助")
         .onAppear {
+            consumePendingHelpEntryIfNeeded()
             if selectedEntry == nil {
                 selectedEntry = HelpFAQ.entries(in: selectedCategory).first
             }
         }
         .onChange(of: selectedCategory) { _, newValue in
             selectedEntry = HelpFAQ.entries(in: newValue).first
+        }
+        .onChange(of: session.navigation.request) { _, _ in
+            consumePendingHelpEntryIfNeeded()
+        }
+    }
+
+    private func consumePendingHelpEntryIfNeeded() {
+        guard let entryID = session.navigation.consumePendingHelpEntryID() else { return }
+        if let match = HelpFAQ.all.first(where: { $0.id == entryID }) {
+            selectedCategory = match.category
+            selectedEntry = match
         }
     }
 
@@ -245,19 +257,32 @@ enum HelpFAQ {
             id: "how-orders-work",
             category: .order,
             question: "订单与托管如何结算？",
-            intro: "发布时托管最低保障金额；进行中按服务端付款预览预付服务费；服务者标记完成后需验收确认，平台再结算托管资金。",
+            intro: "发布时托管最低保障金额；进行中预付服务费（托管，非消费）；服务者标记完成后需验收确认，平台再结算托管资金并计入服务费收入。",
             steps: [
                 Step(title: "发布托管", content: "发布需求时，最低保障金额会预付至平台托管（以服务端 deposit 为准）。"),
                 Step(title: "两段式成单", content: "服务方请求接单 → 需求方接受申请 → 生成订单。不要把应标/抢单当成已成交。"),
-                Step(title: "进行中预付", content: "订单进入进行中后，打开付款页查看服务端分项再确认预付服务费。"),
+                Step(title: "进行中预付", content: "订单进入进行中后，打开付款页查看服务端分项再确认服务费托管。此时不计平台收入。"),
                 Step(title: "服务者完成", content: "服务者标记完成后，订单进入待验收状态。"),
-                Step(title: "验收结算", content: "需求方验收确认后，平台按约定结算托管资金给服务者。"),
+                Step(title: "验收结算", content: "需求方验收确认后，平台按约定结算托管资金给服务者，并将已托管服务费计入平台收入。"),
                 Step(title: "部分完成", content: "服务方可按已完成部分提交结算金额与说明；余量与退款以服务端结算结果为准。"),
-                Step(title: "取消退款", content: "取消订单时，已预付的服务费会按平台规则退回需求方。"),
+                Step(title: "取消退款", content: "取消订单时，已托管的服务费自动全额退回需求方，不产生平台收入。"),
             ]
         ),
-        Entry(id: "escrow-fee", category: .order, question: "托管费用如何计算？", intro: "托管费用以付款预览和服务端实时计算为准。", steps: []),
-        Entry(id: "preview-change", category: .order, question: "为什么预览金额会变化？", intro: "金额会随时间、数量和费用规则动态变化。", steps: []),
+        Entry(
+            id: "escrow-fee",
+            category: .order,
+            question: "托管费用如何计算？",
+            intro: "平台只收取成交相关手续费，不做会员费或内购。费率与金额一律以付款页服务端分项为准，客户端不编造默认比例。",
+            steps: [
+                Step(title: "发布托管", content: "发布需求时，最低保障金额预付至平台托管（deposit），这笔钱在验收前由平台保管，不是平台收入。"),
+                Step(title: "服务费费率", content: "进行中预付时，打开付款页查看服务端返回的「服务费率」与「服务费金额」。界面上的比例必须来自服务端字段，不使用客户端写死的百分数。"),
+                Step(title: "计算公式", content: "通常为：成交价（或约定金额）× 服务费率 = 平台服务费。付款页会展示规则版本号，便于核对。"),
+                Step(title: "预付性质", content: "预付服务费是托管冻结，不是消费。验收成功后才计入平台收入；取消、争议退款时自动全额退回。"),
+                Step(title: "验收结算", content: "需求方验收确认后，平台按约定结算托管资金给服务者，并完成服务费入账。"),
+                Step(title: "哪里核对", content: "付款预览页、订单结算明细、钱包流水均可查看金额；钱包流水对服务费预付记为 HOLD，退回记为 RELEASE。"),
+            ]
+        ),
+        Entry(id: "preview-change", category: .order, question: "为什么预览金额会变化？", intro: "金额会随时间、数量和费用规则动态变化，请以打开付款页时服务端返回的分项为准。", steps: []),
         Entry(id: "offline-transfer", category: .order, question: "可以线下交易或转账吗？", intro: "平台不支持绕过托管的线下充值或转账。", steps: []),
         Entry(id: "partial-settle", category: .order, question: "部分完成如何结算？", intro: "可按完成比例提交结算并由双方确认。", steps: []),
         Entry(id: "order-dispute", category: .order, question: "对订单有异议怎么办？", intro: "在验收期内发起争议并提供相关证据。", steps: []),

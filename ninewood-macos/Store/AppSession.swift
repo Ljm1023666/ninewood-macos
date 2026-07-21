@@ -12,6 +12,7 @@ final class AppNavigationState {
     private(set) var request: AppNavigationRequest?
     private(set) var currentPath = "/discover"
     private(set) var pendingDirectPeerID: String?
+    private(set) var pendingHelpEntryID: String?
 
     @discardableResult
     func navigate(to rawPath: String) -> Bool {
@@ -41,11 +42,21 @@ final class AppNavigationState {
         navigate(to: "/messages")
     }
 
+    func openHelp(entryID: String) {
+        pendingHelpEntryID = entryID
+        navigate(to: "/help")
+    }
+
     var hasPendingDirectPeer: Bool { pendingDirectPeerID != nil }
 
     func consumePendingDirectPeerID() -> String? {
         defer { pendingDirectPeerID = nil }
         return pendingDirectPeerID
+    }
+
+    func consumePendingHelpEntryID() -> String? {
+        defer { pendingHelpEntryID = nil }
+        return pendingHelpEntryID
     }
 
     private func normalized(_ rawPath: String) -> String {

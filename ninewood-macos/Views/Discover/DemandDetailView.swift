@@ -8,6 +8,7 @@ struct DemandDetailView: View {
         case deadPool
     }
 
+    let demand: Demand
     let poolMode: PoolMode
     let previewMode: Bool
     @Environment(AppSession.self) private var session
@@ -22,6 +23,7 @@ struct DemandDetailView: View {
         poolMode: PoolMode = .standard,
         previewMode: Bool = false
     ) {
+        self.demand = demand
         self.poolMode = poolMode
         self.previewMode = previewMode
         _model = State(initialValue: DemandDetailFeatureModel(demand: demand))
@@ -123,13 +125,17 @@ struct DemandDetailView: View {
                 }
             }
         }
-        .task(id: model.demand.id) {
+        .onChange(of: demand.id, initial: true) { _, _ in
+            // 父级换选时不 remount：先同步列表快照，再软拉详情。
+            model.replace(with: demand)
+        }
+        .task(id: demand.id) {
             guard !previewMode else { return }
             model.configure(
                 demandRepository: session.demandRepository,
                 userRepository: session.userRepository
             )
-            await model.load()
+            await model.load(surfaceRefreshError: false)
         }
         .sheet(isPresented: $showApplySheet) {
             ApplyDemandSheet { reason in
@@ -281,10 +287,10 @@ struct DemandDetailView: View {
 
     private var countdownCard: some View {
         HStack(spacing: AppTheme.space16) {
-            sectionLabel("可见倒计时", systemImage: "clock")
+            sectionLabel("预计失效", systemImage: "clock")
             Text(model.demand.countdownText)
-                .font(.body.monospacedDigit().weight(.semibold))
-                .foregroundStyle(AppTheme.error)
+                .font(.body.monospacedDigit().weight(.medium))
+                .foregroundStyle(AppTheme.secondaryLabel)
             Spacer(minLength: 0)
         }
         .padding(.vertical, AppTheme.space12)

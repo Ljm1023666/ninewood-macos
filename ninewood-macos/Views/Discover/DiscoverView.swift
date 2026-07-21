@@ -37,7 +37,7 @@ struct DiscoverView: View {
                         demand: selectedDemand,
                         previewMode: isDesignPreview
                     )
-                    .nwStableDetailIdentity(selectedDemand.id)
+                    .transaction { $0.animation = nil }
                 } else {
                     NWDetailPlaceholder(
                         title: "选择需求",
@@ -267,9 +267,9 @@ struct DemandRowView: View {
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(demand.countdownText)
-                    .font(.system(size: 14, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(AppTheme.error)
-                Text("剩余可见")
+                    .font(.system(size: 14, weight: .medium).monospacedDigit())
+                    .foregroundStyle(AppTheme.secondaryLabel)
+                Text("预计失效")
                     .font(.system(size: 10))
                     .foregroundStyle(AppTheme.secondaryLabel)
             }

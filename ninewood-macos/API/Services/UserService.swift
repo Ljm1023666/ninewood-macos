@@ -177,13 +177,15 @@ final class UserService {
         receivePushes: Bool? = nil,
         pushFrequency: String? = nil,
         excludeKeywords: [String]? = nil,
-        excludeTags: [String]? = nil
+        excludeTags: [String]? = nil,
+        excludeRegions: [Int]? = nil
     ) async throws -> PushPreferenceDTO {
         struct Body: Encodable {
             let receivePushes: Bool?
             let pushFrequency: String?
             let excludeKeywords: [String]?
             let excludeTags: [String]?
+            let excludeRegions: [Int]?
         }
         return try await client.put(
             "/pushes/preferences",
@@ -191,7 +193,8 @@ final class UserService {
                 receivePushes: receivePushes,
                 pushFrequency: pushFrequency,
                 excludeKeywords: excludeKeywords,
-                excludeTags: excludeTags
+                excludeTags: excludeTags,
+                excludeRegions: excludeRegions
             )
         )
     }

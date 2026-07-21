@@ -85,7 +85,7 @@ struct WalletView: View {
             ScrollView {
                 DocumentShell(maxWidth: 1040) {
                     VStack(alignment: .leading, spacing: AppTheme.space24) {
-                        Text("1 点 = 1 元。发布需求时托管最低保障；预付仅扣 5% 服务费，验收时结算余款。")
+                        Text("1 点 = 1 元。发布需求时托管最低保障；服务费预付为托管冻结，验收成功后才计入平台收入，取消则全额退回。")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
@@ -447,8 +447,26 @@ struct WalletView: View {
             txnID: String(item.id.prefix(12)),
             orderID: item.referenceId ?? "—",
             symbol: service.symbol(for: item.type),
-            amountColor: isIncome ? AppTheme.openStatus : AppTheme.error
+            amountColor: isIncome ? AppTheme.openStatus : AppTheme.error,
+            feeFormulaText: feeFormulaText(for: item)
         )
+    }
+
+    private static func feeFormulaText(for item: WalletLedgerItemDTO) -> String? {
+        let memo = (item.memo ?? "").lowercased()
+        let looksLikeFee = memo.contains("服务费") || item.type.uppercased().contains("FEE")
+        guard looksLikeFee || item.feeRate != nil || item.baseAmount != nil else { return nil }
+
+        if let rate = item.feeRate, let base = item.baseAmount?.value {
+            let pct = rate * 100
+            let rateText = pct.rounded() == pct ? "\(Int(pct))%" : String(format: "%.1f%%", pct)
+            let feeAbs = abs(item.amount.value)
+            return "\(base.currencyText) × \(rateText) = \(feeAbs.currencyText)"
+        }
+        if let memo = item.memo, memo.contains("%") {
+            return memo
+        }
+        return "费率明细见订单付款预览；钱包流水暂未返回基数/费率字段"
     }
 }
 
@@ -522,6 +540,9 @@ private struct WalletTransactionDetailDrawer: View {
                     detailRow("变动金额", row.amountText)
                     detailRow("余额", row.balanceText)
                     detailRow("业务对象", row.businessObject)
+                    if let formula = row.feeFormulaText {
+                        detailRow("费用计算", formula)
+                    }
                 }
 
                 Text("以上信息由系统自动记录。")
@@ -582,6 +603,8 @@ struct WalletLedgerRow: Identifiable {
     let orderID: String
     let symbol: String
     let amountColor: Color
+    /// 可审计公式，例如「600 点 × 5% = 30 点」；缺字段时为说明文案。
+    var feeFormulaText: String? = nil
 }
 
 enum WalletDesignPreviewFixtures {

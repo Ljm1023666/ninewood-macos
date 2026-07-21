@@ -122,6 +122,9 @@ struct WalletLedgerItemDTO: Decodable, Identifiable {
     let referenceId: String?
     let memo: String?
     let createdAt: String
+    /// 可选：服务端若返回则可展示「基数 × 费率」公式。
+    let feeRate: Double?
+    let baseAmount: FlexibleDecimal?
 }
 
 struct WalletLedgerPageDTO: Decodable {

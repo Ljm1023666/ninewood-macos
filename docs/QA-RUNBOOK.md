@@ -118,10 +118,12 @@ export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 | e4-1784283980 | 2026-07-17T10:26:22Z | B 争议 | pass | order `61ed8d2c…` dispute 成功 |
 | e4-1784283980 | 2026-07-17T10:26:22Z | C 取消 | pass | order `8247f631…` 未预付取消成功 |
 | u-1784349366 | 2026-07-18T04:36:06Z | U1–U7 + A8（无 AI） | pass | captcha `bypass` + SMS `delivery=fallback`；demand `eb9538e5…` order `3d8836cb…` COMPLETED；review `02f2a5a1…`；dispute order `defec550…` DISPUTED；cancel `541e2c15…`；通知 2 条均带 `orderId`（可深链订单） |
+| acp1-1784598649 | 2026-07-21T01:50:49Z | AC-P1 服务费托管 | **pass** | A：prepay=`HELD`→confirm=`CONSUMED`+`platformRevenue=5`；C：cancel=`RELEASED` 余额全额恢复；B：dispute→admin refund=`RELEASED`。order A `de8c749d…` / C `b85e486c…` / B `260c30fc…`。脚本 `e4-acp1-service-fee-hold-smoke.sh` |
 
 可复跑脚本：
 
 - `scripts/cloud-migrate/e4-trade-loop-smoke.sh`（交易主链；已含 A8 评价）
+- `scripts/cloud-migrate/e4-acp1-service-fee-hold-smoke.sh`（AC-P1：托管预付 / 验收入账 / 取消与争议全额退）
 - `scripts/cloud-migrate/u-acceptance-no-ai.sh`（U1–U7 + A8，不含 Agent）
 
 > **A8 评价：** 批次 `u-1784349366` 已 API E4 通过；`e4-trade-loop-smoke.sh` 已补 A8 步骤。Mac App UI 评价入口仍须手测（U5）。

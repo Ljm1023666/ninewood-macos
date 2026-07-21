@@ -147,7 +147,7 @@ struct FavoritesView: View {
                         }
                     } else if let selectedDemand {
                         DemandDetailView(demand: selectedDemand, previewMode: false)
-                            .nwStableDetailIdentity(selectedDemand.id)
+                            .transaction { $0.animation = nil }
                     } else if isLoading {
                         ProgressView("加载中…")
                     } else if let loadError {
@@ -545,7 +545,7 @@ private enum FavoritesStatusMapper {
         switch demandStatus {
         case .active: .recruiting
         case .inProgress: .inProgress
-        case .completed, .withdrawn, .cancelled: .ended
+        case .completed, .withdrawn, .cancelled, .draft: .ended
         case .frozen: .expired
         case .unknown: .recruiting
         }

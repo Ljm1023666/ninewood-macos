@@ -260,7 +260,7 @@ enum OrdersDesignPreviewFixtures {
             dealAmount: amount,
             escrowAmount: amount,
             remainingPay: amount,
-            serviceFee: amount * Decimal(string: "0.10")!,
+            serviceFee: amount * Decimal(string: "0.05")!,
             amountHint: "资金分项由服务端规则确认",
             amountsFromServer: true
         )
@@ -591,12 +591,12 @@ private struct OrdersDesignReferenceDetail: View {
             HStack(spacing: 6) {
                 Text("托管金额（总额）600 点")
                 Text("-").foregroundStyle(.secondary)
-                Text("服务费（10%）60 点")
+                Text("服务费（5%）30 点")
                 Text("=").foregroundStyle(.secondary)
-                Text("服务方可得 540 点").foregroundStyle(AppTheme.openStatus)
+                Text("服务方可得 570 点").foregroundStyle(AppTheme.openStatus)
             }
             .font(.caption)
-            Text("您本次需预付 600 点（约 ¥600.00）")
+            Text("您本次需预付服务费 30 点（约 ¥30.00）")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppTheme.primary)
             HStack {
@@ -694,6 +694,9 @@ struct OrderDetailView: View {
                     settleRow("已托管（最低保障）", order.escrowDisplayText)
                     settleRow("待支付余款", order.remainingPayDisplayText)
                     settleRow("平台服务费", order.serviceFeeDisplayText)
+                    if let formula = order.serviceFeeFormulaText {
+                        settleRow("服务费计算", formula)
+                    }
                     settleRow(
                         order.isPrepaid ? "验收应付（已预付服务费）" : "验收应付（含服务费）",
                         order.amountsFromServer ? order.totalDue.currencyText : "—"
@@ -764,14 +767,14 @@ struct OrderDetailView: View {
                 Button {
                     showPaymentSheet = true
                 } label: {
-                    Label("支付平台服务费（5%）", systemImage: "creditcard.fill")
+                    Label("支付平台服务费", systemImage: "creditcard.fill")
                         .frame(maxWidth: .infinity)
                         .frame(height: 36)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(model.isActing)
 
-                Text("预付仅扣除服务费；成交余款在验收时结算。托管的最低保障在发布时已锁定。")
+                Text("本次预付为服务费托管，不是消费：验收成功后才计入平台收入；取消或未达成结果将自动全额退回。费率与金额以本页服务端分项为准。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -1014,7 +1017,7 @@ struct PaymentSheet: View {
             providerName: order.provider.name,
             agreedAmount: order.dealAmount,
             escrowAmount: order.escrowAmount,
-            feeRate: Decimal(string: "0.05") ?? 0.05,
+            feeRate: nil,
             serviceFee: 0,
             balance: 0,
             ruleVersion: "—",
@@ -1028,7 +1031,7 @@ struct PaymentSheet: View {
         balance: Decimal
     ) -> PaymentPrepayModalModel {
         let agreed = breakdown.agreedPrice?.value ?? order.dealAmount
-        let feeRate = Decimal(breakdown.serviceFeeRate ?? 0.05)
+        let feeRate = breakdown.serviceFeeRate.map { Decimal($0) }
         let fee = breakdown.payableNow?.value ?? breakdown.serviceFee?.value ?? 0
         return PaymentPrepayModalModel(
             orderCode: order.id,

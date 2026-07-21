@@ -22,6 +22,7 @@ struct PaymentPrepayDesignPreview: View {
             .fixedSize(horizontal: false, vertical: true)
         }
         .frame(minWidth: 1100, minHeight: 780)
+        .environment(AppSession())
     }
 }
 
@@ -34,7 +35,8 @@ struct PaymentPrepayModalModel: Equatable {
     var providerName: String
     var agreedAmount: Decimal
     var escrowAmount: Decimal
-    var feeRate: Decimal
+    /// 服务端返回的真实费率；缺失时不编造默认值。
+    var feeRate: Decimal?
     var serviceFee: Decimal
     var balance: Decimal
     var ruleVersion: String
@@ -60,6 +62,7 @@ struct PaymentPrepayModalModel: Equatable {
 // MARK: - Confirm prepay modal
 
 struct PaymentPrepayModal: View {
+    @Environment(AppSession.self) private var session
     @Binding var model: PaymentPrepayModalModel
     var showsRetryBanner: Bool = false
     var isLoadingPreview: Bool = false
@@ -71,7 +74,8 @@ struct PaymentPrepayModal: View {
     var onClose: () -> Void
 
     private var feeRateText: String {
-        let pct = (model.feeRate * 100 as NSDecimalNumber).doubleValue
+        guard let rate = model.feeRate else { return "以下单结算为准" }
+        let pct = (rate * 100 as NSDecimalNumber).doubleValue
         if pct.rounded() == pct {
             return "\(Int(pct))%"
         }
@@ -117,7 +121,7 @@ struct PaymentPrepayModal: View {
                 Text("确认预付")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(AppTheme.onSurface)
-                Text("服务费预付用于保障服务开始，资金由平台托管")
+                Text("服务费预付用于保障履约：资金由平台托管，验收成功后才计入平台收入；取消或未达成结果自动全额退回")
                     .font(.system(size: 12))
                     .foregroundStyle(AppTheme.secondaryLabel)
             }
@@ -293,21 +297,49 @@ struct PaymentPrepayModal: View {
     }
 
     private var agreementRow: some View {
-        Button {
-            model.agreedChecked.toggle()
-        } label: {
-            HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
+            Button {
+                model.agreedChecked.toggle()
+            } label: {
                 Image(systemName: model.agreedChecked ? "checkmark.square.fill" : "square")
                     .font(.system(size: 15))
                     .foregroundStyle(model.agreedChecked ? AppTheme.primary : Color(red: 0.70, green: 0.72, blue: 0.75))
-                Text("我已阅读并同意\(Text("《Ninewood 服务协议》").foregroundStyle(AppTheme.primary))与\(Text("《服务费规则》").foregroundStyle(AppTheme.primary))")
-                    .foregroundStyle(AppTheme.onSurface)
-                    .font(.system(size: 12))
-                    .multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
             }
+            .buttonStyle(.plain)
+
+            Text(agreementAttributedText)
+                .foregroundStyle(AppTheme.onSurface)
+                .font(.system(size: 12))
+                .multilineTextAlignment(.leading)
+                .environment(\.openURL, OpenURLAction { url in
+                    handleAgreementURL(url)
+                    return .handled
+                })
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
+    }
+
+    private var agreementAttributedText: AttributedString {
+        var text = AttributedString("我已阅读并同意")
+        var service = AttributedString("《Ninewood 服务协议》")
+        service.foregroundColor = AppTheme.primary
+        service.link = URL(string: "ninewood://help/how-orders-work")
+        var mid = AttributedString("与")
+        var fee = AttributedString("《服务费规则》")
+        fee.foregroundColor = AppTheme.primary
+        fee.link = URL(string: "ninewood://help/escrow-fee")
+        text.append(service)
+        text.append(mid)
+        text.append(fee)
+        return text
+    }
+
+    private func handleAgreementURL(_ url: URL) {
+        guard url.scheme == "ninewood", url.host == "help" else { return }
+        let entryID = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !entryID.isEmpty else { return }
+        onClose()
+        session.navigation.openHelp(entryID: entryID)
     }
 
     private var footer: some View {

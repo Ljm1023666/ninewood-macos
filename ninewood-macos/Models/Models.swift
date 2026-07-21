@@ -92,6 +92,7 @@ enum DemandStatus: Hashable {
     case completed
     case withdrawn
     case cancelled
+    case draft
     case unknown(String)
 
     init(rawValue: String?) {
@@ -102,7 +103,8 @@ enum DemandStatus: Hashable {
         case "IN_PROGRESS", "ACCEPTED": self = .inProgress
         case "COMPLETED": self = .completed
         case "WITHDRAWN": self = .withdrawn
-        case "CANCELLED": self = .cancelled
+        case "CANCELLED", "CLOSED": self = .cancelled
+        case "DRAFT": self = .draft
         default: self = .unknown(raw)
         }
     }
@@ -115,6 +117,7 @@ enum DemandStatus: Hashable {
         case .completed: "已完成"
         case .withdrawn: "已撤回"
         case .cancelled: "已取消"
+        case .draft: "草稿"
         case .unknown: "状态更新中"
         }
     }
@@ -130,6 +133,7 @@ enum DemandStatus: Hashable {
         case .completed: "需求已完成"
         case .withdrawn: "需求已撤回"
         case .cancelled: "需求已取消"
+        case .draft: "草稿尚未公开"
         case .unknown: "当前状态不可申请"
         }
     }
@@ -183,11 +187,13 @@ struct Order: Identifiable, Hashable {
     var escrowAmount: Decimal
     var remainingPay: Decimal
     var serviceFee: Decimal
+    /// 服务端返回的费率；缺失时不编造默认值。
+    var serviceFeeRate: Decimal? = nil
     var amountHint: String
     /// 为 false 时，服务费等分项尚未经服务端资金字段确认，不得用于付款确认文案。
     var amountsFromServer: Bool = false
 
-    /// 预付服务费后，验收时跳过服务费；未预付则验收时一并收取
+    /// 预付服务费表示已托管；验收成功后计入平台收入，取消/未达成结果全额退回。
     var totalDue: Decimal { paidAt == nil ? remainingPay + serviceFee : remainingPay }
     var isPrepaid: Bool { paidAt != nil }
 
@@ -202,6 +208,19 @@ struct Order: Identifiable, Hashable {
     var serviceFeeDisplayText: String {
         if serviceFee > 0 { return serviceFee.currencyText }
         return amountsFromServer ? "打开预付查看服务端分项" : "—"
+    }
+
+    /// 成交价 × 费率 = 手续费；缺字段时返回说明文案。
+    var serviceFeeFormulaText: String? {
+        guard serviceFee > 0 else { return nil }
+        if let rate = serviceFeeRate {
+            let pct = (rate * 100 as NSDecimalNumber).doubleValue
+            let rateText = pct.rounded() == pct
+                ? "\(Int(pct))%"
+                : String(format: "%.1f%%", pct)
+            return "\(dealAmount.currencyText) × \(rateText) = \(serviceFee.currencyText)"
+        }
+        return "\(serviceFee.currencyText)（费率以下单结算为准）"
     }
 }
 

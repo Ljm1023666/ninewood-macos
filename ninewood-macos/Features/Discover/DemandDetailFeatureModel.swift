@@ -15,6 +15,8 @@ final class DemandDetailFeatureModel {
 
     private var demandRepository: DemandRepository?
     private var userRepository: UserRepository?
+    /// 切换需求时递增，用于丢弃过期的 detail / favorite 回写。
+    private var loadGeneration = 0
 
     init(demand: Demand) {
         self.demand = demand
@@ -28,27 +30,69 @@ final class DemandDetailFeatureModel {
         self.userRepository = userRepository
     }
 
-    func load() async {
-        async let detail: Void = refresh()
-        async let favorite: Void = loadFavoriteState()
+    /// 列表点选时立刻换成本地快照，避免整页 remount 抖动。
+    func replace(with demand: Demand) {
+        guard self.demand.id != demand.id else {
+            self.demand = demand
+            return
+        }
+        loadGeneration += 1
+        self.demand = demand
+        refreshError = nil
+        actionMessage = nil
+        actionError = nil
+        isFavorited = false
+        isRefreshing = false
+        isFavoriting = false
+        isSnatching = false
+    }
+
+    func load(surfaceRefreshError: Bool = false) async {
+        let generation = loadGeneration
+        let demandID = demand.id
+        async let detail: Void = refresh(surfaceError: surfaceRefreshError, generation: generation, demandID: demandID)
+        async let favorite: Void = loadFavoriteState(generation: generation, demandID: demandID)
         _ = await (detail, favorite)
     }
 
-    func refresh() async {
-        guard let demandRepository, !isRefreshing else { return }
-        isRefreshing = true
-        refreshError = nil
-        defer { isRefreshing = false }
+    func refresh(surfaceError: Bool = true) async {
+        await refresh(surfaceError: surfaceError, generation: loadGeneration, demandID: demand.id)
+    }
+
+    private func refresh(surfaceError: Bool, generation: Int, demandID: String) async {
+        guard let demandRepository else { return }
+        if generation == loadGeneration {
+            isRefreshing = true
+            if surfaceError { refreshError = nil }
+        }
+        defer {
+            if generation == loadGeneration {
+                isRefreshing = false
+            }
+        }
         do {
-            demand = try await demandRepository.detail(id: demand.id)
+            let fresh = try await demandRepository.detail(id: demandID)
+            guard generation == loadGeneration, demand.id == demandID else { return }
+            demand = fresh
+            refreshError = nil
         } catch {
-            refreshError = Self.message(for: error)
+            guard generation == loadGeneration, demand.id == demandID else { return }
+            // 自动切换时保留列表快照，不把「需求不存在」刷成红条抖动。
+            if surfaceError {
+                refreshError = Self.message(for: error)
+            }
         }
     }
 
     func loadFavoriteState() async {
+        await loadFavoriteState(generation: loadGeneration, demandID: demand.id)
+    }
+
+    private func loadFavoriteState(generation: Int, demandID: String) async {
         guard let userRepository else { return }
-        isFavorited = (try? await userRepository.isFavorite(demandID: demand.id)) ?? isFavorited
+        let favorited = (try? await userRepository.isFavorite(demandID: demandID)) ?? false
+        guard generation == loadGeneration, demand.id == demandID else { return }
+        isFavorited = favorited
     }
 
     func toggleFavorite() async {
